@@ -1,16 +1,20 @@
-#include "Header.h"
-extern char serverIP[15];
-extern bool g_progFlag;
+Ôªø#include "Header.h"
+#include "global.h"
+#include "socket.h"
+#include "RUtil.h"
 
 double dwStreamIn;
 double dwStreamOut;
 
-//ªÒ»°CPU≤Œ ˝
-DWORD deax;
-DWORD debx;
-DWORD decx;
-DWORD dedx;
-void initCPU(DWORD veax)
+//Ëé∑ÂèñCPUÂèÇÊï∞
+long deax;
+long debx;
+long decx;
+long dedx;
+
+#ifdef WIN32
+
+void initCPU(long veax)
 {
 	__asm
 	{
@@ -50,10 +54,10 @@ string getManufactureID()
 }
 string getCpuType()
 {
-	const DWORD id = 0x80000002;
+	const long id = 0x80000002;
 	char cpuType[49];
 	memset(cpuType, 0, sizeof(cpuType));
-	for (DWORD t = 0; t < 3; t++)
+	for (long t = 0; t < 3; t++)
 	{
 		initCPU(id + t);
 		memcpy(cpuType + 16 * t + 0, &deax, 4);
@@ -64,10 +68,10 @@ string getCpuType()
 	return cpuType;
 }
 
-__int64 CompareFileTime(FILETIME time1, FILETIME time2)
+long long CompareFileTime(FILETIME time1, FILETIME time2)
 {
-	__int64 a = time1.dwHighDateTime << 32 | time1.dwLowDateTime;
-	__int64 b = time2.dwHighDateTime << 32 | time2.dwLowDateTime;
+	long long a = time1.dwHighDateTime << 32 | time1.dwLowDateTime;
+	long long b = time2.dwHighDateTime << 32 | time2.dwLowDateTime;
 	return   (b - a);
 }
 
@@ -87,12 +91,12 @@ int getcpuUsage()
 	preidleTime = idleTime;
 	prekernelTime = kernelTime;
 	preuserTime = userTime;
-	hEvent = CreateEventA(NULL, FALSE, FALSE, NULL); // ≥ı º÷µŒ™ nonsignaled £¨≤¢«“√ø¥Œ¥•∑¢∫Û◊‘∂Ø…Ë÷√Œ™nonsignaled 
+	hEvent = CreateEventA(NULL, FALSE, FALSE, NULL);  // ÂàùÂßãÂÄº‰∏∫ nonsignaled ÔºåÂπ∂‰∏îÊØèÊ¨°Ëß¶ÂèëÂêéËá™Âä®ËÆæÁΩÆ‰∏∫nonsignaled 
 	WaitForSingleObject(hEvent, 1000);
 	res = GetSystemTimes(&idleTime, &kernelTime, &userTime);
-	__int64 idle = CompareFileTime(preidleTime, idleTime);
-	__int64 kernel = CompareFileTime(prekernelTime, kernelTime);
-	__int64 user = CompareFileTime(preuserTime, userTime);
+	long long idle = CompareFileTime(preidleTime, idleTime);
+	long long kernel = CompareFileTime(prekernelTime, kernelTime);
+	long long user = CompareFileTime(preuserTime, userTime);
 	cpu = (kernel + user - idle) * 100 / (kernel + user) + (rand() % 5);
 	return cpu;
 }
@@ -163,7 +167,7 @@ double upstreamSpeed()
 	{
 		if (strlen(szTest) != 1)
 		{
-			szTest[1023] = '\0';    // ˝◊È≤π∆Î£¨“™≤ªª·±®‘ΩΩÁ¥ÌŒÛ
+			szTest[1023] = '\0';   //Êï∞ÁªÑË°•ÈΩêÔºåË¶Å‰∏ç‰ºöÊä•Ë∂äÁïåÈîôËØØ
 			temp = szTest;
 			temp = temp.substr(39, 11);
 			memset(szTest, 0, 1024);
@@ -187,7 +191,7 @@ double upstreamSpeed()
 	{
 		if (strlen(szTest) != 1)
 		{
-			szTest[1023] = '\0';    // ˝◊È≤π∆Î£¨“™≤ªª·±®‘ΩΩÁ¥ÌŒÛ
+			szTest[1023] = '\0';   //Êï∞ÁªÑË°•ÈΩêÔºåË¶Å‰∏ç‰ºöÊä•Ë∂äÁïåÈîôËØØ
 			temp = szTest;
 			temp = temp.substr(39, 11);
 			memset(szTest, 0, 1024);
@@ -221,7 +225,7 @@ double downstreamSpeed()
 	{
 		if (strlen(szTest) != 1)
 		{
-			szTest[1023] = '\0';    // ˝◊È≤π∆Î£¨“™≤ªª·±®‘ΩΩÁ¥ÌŒÛ
+			szTest[1023] = '\0';    
 			temp = szTest;
 			temp = temp.substr(25, 11);
 			memset(szTest, 0, 1024);
@@ -245,7 +249,7 @@ double downstreamSpeed()
 	{
 		if (strlen(szTest) != 1)
 		{
-			szTest[1023] = '\0';    // ˝◊È≤π∆Î£¨“™≤ªª·±®‘ΩΩÁ¥ÌŒÛ
+			szTest[1023] = '\0'; 
 			temp = szTest;
 			temp = temp.substr(25, 11);
 			memset(szTest, 0, 1024);
@@ -262,236 +266,163 @@ double downstreamSpeed()
 	dwStreamIn = (tempStreamIn2 - tempStreamIn1) / 1024 / 0.1;
 	return dwStreamIn;
 }
+#endif
 
-//∑¢ÀÕ–ƒÃ¯
-void SendHeart()
-{
-#ifdef WIN32
-	WSADATA wsa;
-	WSAStartup(MAKEWORD(2, 2), &wsa); //initial Ws2_32.dll by a process
-#endif
-	int client;
-	int preUsa;
-	bool flag = true;
-	client = socket(AF_INET, SOCK_DGRAM, 0);
-	if (client < 0)
-	{
-#ifdef WIN32
-		cout << "socket error!" << endl;
-#endif
-#ifdef LINUX
-		cout << "socket error!" << endl;
-#endif
-#ifdef DVXWORK
-		logMsg("socket error!\n", 0, 0, 0, 0, 0, 0);
-#endif
-		flag = false;
+
+void SendHeart() {
+	RSocket tsocket;
+	if (!tsocket.createSocket(RSocket::R_UDP)){
+		RUtil::printError("create udp socket error!");
+		return;
 	}
-	sockaddr_in hostInfo;
-	hostInfo.sin_family = AF_INET;
-	//hostInfo.sin_addr.s_addr = inet_addr("193.1.103.16");// htonl(INADDR_ANY);
-	hostInfo.sin_addr.s_addr = htonl(INADDR_ANY);
-	hostInfo.sin_port = htons(HEARTPORT);
-	Stru_Heart heartbuf;
-	int ret = 0;
-	sockaddr_in server;
 
-#ifdef WIN32
+	if (!tsocket.bind(nullptr, HEARTPORT)){
+		RUtil::printError("bind socket error!");
+		return;
+	}
+    
+    Stru_Heart heartbuf;
 
-#endif
-#ifdef DVXWORK
-	FAST DEV_HDR *pDevHdr;
-#endif
-	while (flag && g_progFlag)
-	{
-		if (strcmp(serverIP, "0.0.0.0") != 0) // ≈–∂œµ±«∞ «∑Ò“—ªÒ÷™∑˛ŒÒ∆˜µƒIPµÿ÷∑
+    while (true && g_progFlag) {
+
+		if (strcmp(serverIP, "0.0.0.0") != 0) // Âà§Êñ≠ÂΩìÂâçÊòØÂê¶Â∑≤Ëé∑Áü•ÊúçÂä°Âô®ÁöÑIPÂú∞ÂùÄ
 		{
-			//cout << serverIP << endl;
 #ifdef WIN32
-			//memset((char *)&heartbuf,0,sizeof(Stru_Heart));
-			string tmp;
-			tmp = "";
-			tmp = getCpuType();
-			const char* temp = tmp.c_str();
-			memcpy(heartbuf.cpuName, temp, strlen(temp));		//CPU√˚≥∆
-			//cout << "CPU√˚≥∆:" << temp << " ";
-			tmp = "";
-			temp = NULL;
+            //memset((char *)&heartbuf,0,sizeof(Stru_Heart));
+            string tmp;
+            tmp = "";
+            tmp = getCpuType();
+            const char* temp = tmp.c_str();
+            memcpy(heartbuf.cpuName, temp, strlen(temp));		//CPUÂêçÁß∞
 
-			long midvalue = getCpuFreq();
-			memset(heartbuf.cpuFreq, 0, 6);
-			stringstream ss;
-			ss << midvalue;
-			ss >> tmp;
-			ss.str("");
-			temp = tmp.c_str();
-			memcpy(heartbuf.cpuFreq, temp, strlen(temp));		//CPU÷˜∆µ
-			//cout << "CPU÷˜∆µ:" << temp << " ";
-			tmp = "";
-			temp = NULL;
+            tmp = "";
+            temp = NULL;
 
-			int usa = getcpuUsage();
-			memset(heartbuf.cpuUsage, 0, 4);
-			if (usa < 0)
-			{
-				preUsa = 0 + (rand() % 5);
-				stringstream sss;
-				sss << preUsa;
-				sss >> tmp;
-				sss.str("");
-				temp = tmp.c_str();
-				memcpy(heartbuf.cpuUsage, temp, strlen(temp));
-				//cout << "CPU¿˚”√¬ Œ™:" << temp << " ";
-				tmp = "";
-				temp = NULL;
+            long midvalue = getCpuFreq();
+            memset(heartbuf.cpuFreq, 0, 6);
+            stringstream ss;
+            ss << midvalue;
+            ss >> tmp;
+            ss.str("");
+            temp = tmp.c_str();
+            memcpy(heartbuf.cpuFreq, temp, strlen(temp));		//CPU‰∏ªÈ¢ë
 
-			}
-			else if (usa > 100)
-			{
-				preUsa = 100 - (rand() % 5);
-				stringstream sss;
-				sss << preUsa;
-				sss >> tmp;
-				sss.str("");
-				temp = tmp.c_str();
-				memcpy(heartbuf.cpuUsage, temp, strlen(temp));
-				//cout << "CPU¿˚”√¬ Œ™:" << temp << " ";
-				tmp = "";
-				temp = NULL;
-			}
-			else if (usa >= 0 && usa <= 100)
-			{
-				preUsa = usa;
-				stringstream sss;
-				sss << usa;
-				sss >> tmp;
-				sss.str("");
-				temp = tmp.c_str();
-				memcpy(heartbuf.cpuUsage, temp, strlen(temp));					//CPU¿˚”√¬ 
-				//cout << "CPU¿˚”√¬ Œ™:" << temp << " ";
-				tmp = "";
-				temp = NULL;
-			}
+            tmp = "";
+            temp = NULL;
 
-			double total = getMemorytotalInfo();
-			memset(heartbuf.decimal_total, 0, 6);
-			stringstream tt;
-			tt << total;
-			tt >> tmp;
-			tt.str("");
-			temp = tmp.c_str();
-			memcpy(heartbuf.decimal_total, temp, strlen(temp));					//RAM◊‹¥Û–°
-			//cout << "RAM◊‹¥Û–°:" << temp << " ";
-			tmp = "";
-			temp = NULL;
+			int preUsa;
+            int usa = getcpuUsage();
+            memset(heartbuf.cpuUsage, 0, 4);
+            if (usa < 0)
+            {
+                preUsa = 0 + (rand() % 5);
+                stringstream sss;
+                sss << preUsa;
+                sss >> tmp;
+                sss.str("");
+                temp = tmp.c_str();
+                memcpy(heartbuf.cpuUsage, temp, strlen(temp));
 
-			double avl = getMemoryavlInfo();
-			memset(heartbuf.decimal_avl, 0, 6);
-			stringstream aa;
-			aa << avl;
-			aa >> tmp;
-			aa.str("");
-			temp = tmp.c_str();
-			memcpy(heartbuf.decimal_avl, temp, strlen(temp));				//RAMµƒ £”‡¥Û–°
-			//cout << " £”‡RAM¥Û–°:" << temp << endl;
-			tmp = "";
-			temp = NULL;
+                tmp = "";
+                temp = NULL;
 
-			double upspeed = upstreamSpeed();
-			memset(heartbuf.upstreamSpeed, 0, 8);
-			stringstream uu;
-			uu << upspeed;
-			uu >> tmp;
-			uu.str("");
-			temp = tmp.c_str();
-			memcpy(heartbuf.upstreamSpeed, temp, strlen(temp));
-			//cout << "…œ––ÀŸ¬ :" << temp << endl;
-			tmp = "";
-			temp = NULL;
+            }
+            else if (usa > 100)
+            {
+                preUsa = 100 - (rand() % 5);
+                stringstream sss;
+                sss << preUsa;
+                sss >> tmp;
+                sss.str("");
+                temp = tmp.c_str();
+                memcpy(heartbuf.cpuUsage, temp, strlen(temp));
 
+                tmp = "";
+                temp = NULL;
+            }
+            else if (usa >= 0 && usa <= 100)
+            {
+                preUsa = usa;
+                stringstream sss;
+                sss << usa;
+                sss >> tmp;
+                sss.str("");
+                temp = tmp.c_str();
+                memcpy(heartbuf.cpuUsage, temp, strlen(temp));					//CPUÂà©Áî®Áéá
+                tmp = "";
+                temp = NULL;
+            }
 
-			double downspeed = downstreamSpeed();
-			memset(heartbuf.downstreamSpeed, 0, 8);
-			stringstream dd;
-			dd << downspeed;
-			dd >> tmp;
-			dd.str("");
-			temp = tmp.c_str();
-			memcpy(heartbuf.downstreamSpeed, temp, strlen(temp));
-			//cout << "œ¬––ÀŸ¬ £∫" << temp << endl;
-			tmp = "";
-			temp = NULL;
+            double total = getMemorytotalInfo();
+            memset(heartbuf.decimal_total, 0, 6);
+            stringstream tt;
+            tt << total;
+            tt >> tmp;
+            tt.str("");
+            temp = tmp.c_str();
+            memcpy(heartbuf.decimal_total, temp, strlen(temp));					//RAMÊÄªÂ§ßÂ∞è
+
+            tmp = "";
+            temp = NULL;
+
+            double avl = getMemoryavlInfo();
+            memset(heartbuf.decimal_avl, 0, 6);
+            stringstream aa;
+            aa << avl;
+            aa >> tmp;
+            aa.str("");
+            temp = tmp.c_str();
+            memcpy(heartbuf.decimal_avl, temp, strlen(temp));				//RAMÁöÑÂâ©‰ΩôÂ§ßÂ∞è
+
+            tmp = "";
+            temp = NULL;
+
+            double upspeed = upstreamSpeed();
+            memset(heartbuf.upstreamSpeed, 0, 8);
+            stringstream uu;
+            uu << upspeed;
+            uu >> tmp;
+            uu.str("");
+            temp = tmp.c_str();
+            memcpy(heartbuf.upstreamSpeed, temp, strlen(temp));
+
+            tmp = "";
+            temp = NULL;
 
 
+            double downspeed = downstreamSpeed();
+            memset(heartbuf.downstreamSpeed, 0, 8);
+            stringstream dd;
+            dd << downspeed;
+            dd >> tmp;
+            dd.str("");
+            temp = tmp.c_str();
+            memcpy(heartbuf.downstreamSpeed, temp, strlen(temp));
 
-			server.sin_family = AF_INET;
-			server.sin_addr.s_addr = inet_addr(serverIP);
-			server.sin_port = htons(HEARTPORT);
-
-			ret = sendto(client, (char*)&heartbuf, sizeof(heartbuf), 0, (struct sockaddr*)&server, sizeof(struct sockaddr));
-
-			if (ret == -1)
-			{
-				//writeLog("send heart error.\n");
-			}
-		}
-#endif
-#ifdef LINUX
-		if (strcmp(serverIP, "0.0.0.0") != 0) // ≈–∂œµ±«∞ «∑Ò“—ªÒ÷™∑˛ŒÒ∆˜µƒIPµÿ÷∑
-		{
-
+            tmp = "";
+            temp = NULL;
+#else
 			strcpy(heartbuf.cpuName, "0");
 			strcpy(heartbuf.cpuFreq, "0");
 			strcpy(heartbuf.cpuUsage, "0");
 			strcpy(heartbuf.decimal_total, "0");
 			strcpy(heartbuf.decimal_avl, "0");
-			server.sin_family = AF_INET;
-			server.sin_addr.s_addr = inet_addr(serverIP);
-			server.sin_port = htons(HEARTPORT);
-			ret = sendto(client, (char*)&heartbuf, sizeof(heartbuf), 0, (struct sockaddr*)&server, sizeof(struct sockaddr));
+#endif
+			int ret = tsocket.sendTo((char *)&heartbuf, sizeof(heartbuf), serverIP, HEARTPORT);
 			if (ret == -1)
 			{
-				printf("send heart error %d %s %s\n", -1, hostIP, serverIP);
+				RUtil::printError("send heart error [%d:%d]",serverIP,HEARTPORT);
 			}
-		}
-#endif
-#ifdef DVXWORK
-		if (strcmp(serverIP, "0.0.0.0") != 0) // ≈–∂œµ±«∞ «∑Ò“—ªÒ÷™∑˛ŒÒ∆˜µƒIPµÿ÷∑
-		{
 
-			strcpy(heartbuf.cpuName, "0");
-			strcpy(heartbuf.cpuFreq, "0");
-			strcpy(heartbuf.cpuUsage, "0");
-			strcpy(heartbuf.decimal_total, "0");
-			strcpy(heartbuf.decimal_avl, "0");
-			server.sin_family = AF_INET;
-			server.sin_addr.s_addr = inet_addr(serverIP);
-			server.sin_port = htons(HEARTPORT);
-			ret = sendto(client, (char*)&heartbuf, sizeof(heartbuf), 0, (struct sockaddr*)&server, sizeof(struct sockaddr));
-			if (ret == -1)
-			{
-				printf("send heart error %d %s %s\n", -1, hostIP, serverIP);
-			}
-		}
-#endif
 #ifdef WIN32
-		Sleep(500); // ∂® ±
+			Sleep(500);
+#elif linux
+			usleep(500000);
+#elif DVXWORK
+			sleep(1 / 2);
 #endif
-#ifdef LINUX
-		usleep(500000);
-#endif
-#ifdef DVXWORK
-		sleep(1 / 2);
-#endif
-	}
-#ifdef WIN32
-	closesocket(client);
-	WSACleanup();
-#endif
-#ifdef linux
-	close(client);
-#endif
-#ifdef DVXWORK
-	close(client);
-#endif
+        }
+    }
+
+	tsocket.closeSocket();
 }

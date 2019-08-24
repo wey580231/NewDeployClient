@@ -1,21 +1,6 @@
-﻿/******************************************************************* 
- *  2018-2019 Company NanJing RenGu 
- *  All rights reserved. 
- *   
- *  文件名称: stringz.h
- *  简要描述: 工程的主函数，用于启动各个线程
- *   
- *  创建日期: 2019.2.20
- *  作者: RechardWu
- *  说明: 
- *   
- *  修改日期: 
- *  作者: 
- *  说明: 
- ******************************************************************/
-
-#ifndef _STRINGZ_H__
+﻿#ifndef _STRINGZ_H__
 #define _STRINGZ_H__
+
 #include <iostream>
 #include <vector>
 

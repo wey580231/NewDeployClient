@@ -67,8 +67,10 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <time.h>
-#include <QDebug>
 #include <sstream>
+#include <vector>
+#include <cmath>
+#include <iostream>
 #endif
 
 //VXWOKRS平台所需头文件
@@ -152,7 +154,7 @@ struct Stru_Heart
 #ifdef WIN32
 		osType = 1;
 #endif
-#ifdef LINUX
+#ifdef linux
 		osType = 2;
 #endif
 #ifdef DVXWORK
@@ -360,6 +362,12 @@ struct HeadPacket
 	int serialNum;				//序列号
 	int dataSize;				//单步长度
 	long long int totalSize;	//总长度
+};
+
+struct DEV_MEM
+{
+	double total;
+	double used_rate;
 };
 
 

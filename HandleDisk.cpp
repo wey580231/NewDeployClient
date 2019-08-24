@@ -1,10 +1,22 @@
+/*!
+*  @brief     磁盘信息扫描
+*  @details   获取当前操作系统的磁盘信息，以tcp客户端形式，将数据发送至服务器。
+*  @author    wey
+*  @version   1.0
+*  @date      2019.08.22
+*  @warning
+*  @copyright NanJing RenGu.
+*  @note
+*/
+
 #include "Header.h"
+#include "RUtil.h"
+#include "global.h"
+#include "socket.h"
 
 char* UnicodeToUTF8(const char* src, int srclen, int &len);
-extern bool g_progFlag;
-extern char serverIP[15];
 
-
+#ifdef WIN32
 string TCHAR2STRING(TCHAR *STR)
 {
 	int iLen = WideCharToMultiByte(CP_ACP, 0, STR, -1, NULL, 0, NULL, NULL);
@@ -12,8 +24,8 @@ string TCHAR2STRING(TCHAR *STR)
 	WideCharToMultiByte(CP_ACP, 0, STR, -1, chRtn, iLen, NULL, NULL);
 	string str(chRtn);
 	return str;
-
 }
+#endif
 
 void GetDiskInfo(char *drive, char *totalDiskInfo, char *freeDiskInfo, vector<Stru_DiskRets> &diskList)
 {
@@ -76,7 +88,8 @@ void GetDiskInfo(char *drive, char *totalDiskInfo, char *freeDiskInfo, vector<St
 		lpDriveStr += 4;
 	}
 #endif
-#ifdef LINUX
+
+#ifdef linux
 	Stru_DiskRets Rets;
 	FILE * fp;
 	char a[80], d[80], e[80], f[80], buf[256];
@@ -132,43 +145,33 @@ void GetDiskInfo(char *drive, char *totalDiskInfo, char *freeDiskInfo, vector<St
 #endif
 }
 
-
 // 通过tcp返回硬盘结果
 void SendDiskRets(Stru_DiskRetReco diskRet)
 {
-#ifdef WIN32
-	WSADATA wsa;
-	WSAStartup(MAKEWORD(2, 2), &wsa); //initial Ws2_32.dll by a process
-#endif
-	int client;
-	bool flag = true;
-	client = socket(AF_INET, SOCK_STREAM, 0);
-	if (client < 0)
-	{
-		flag = false;
-		//writeLog("create disk failed.\n");
-	}	sockaddr_in server;
-	if (flag&&g_progFlag)
+	RSocket tclient;
+
+	if (!tclient.createSocket(RSocket::R_TCP)){
+		RUtil::printError("create send disk socket error!");
+		return;
+	}
+
+	if (g_progFlag)
 	{
 		if (strcmp(serverIP, "0.0.0.0") != 0)
 		{
-			server.sin_family = AF_INET; // TCP/IP
-			server.sin_addr.s_addr = inet_addr(serverIP);;
-			server.sin_port = htons(SCANRETS);
-			if (connect(client, (struct sockaddr*)&server, sizeof(struct sockaddr)) < 0)
-			{
-				//writeLog("disk connect failed\n");
-			}
-			else
-			{
-				int len = sizeof(diskRet) + diskRet.diskNum * (32 + 12 + 12);
+			if (tclient.connect(serverIP, SCANRETS)){
+				int len = sizeof(diskRet)+diskRet.diskNum * (32 + 12 + 12);
+				
 				char *diskbuf = new char[len];
 				memset(diskbuf, 0, len);
+				
 				int index = 0;
 				memcpy(diskbuf, diskRet.sign, sizeof(diskRet.sign));						//报文标识
 				index += sizeof(diskRet.sign);
+				
 				memcpy(diskbuf + index, diskRet.browserID, sizeof(diskRet.browserID));		// 申请ID号
 				index += sizeof(diskRet.browserID);
+				
 				for (int i = 0; i < diskRet.diskNum; i++)
 				{
 					memcpy(diskbuf + index, diskRet.DiskRets[i].drive, sizeof(diskRet.DiskRets[i].drive));
@@ -178,42 +181,21 @@ void SendDiskRets(Stru_DiskRetReco diskRet)
 					memcpy(diskbuf + index, diskRet.DiskRets[i].freeDiskInfo, sizeof(diskRet.DiskRets[i].freeDiskInfo));
 					index += sizeof(diskRet.DiskRets[i].freeDiskInfo);
 				}
-				int ret = send(client, (const char*)diskbuf, len, 0);
-#ifdef WIN32
-				cout << "发送磁盘信息成功" << endl;
-#endif
-#ifdef LINUX
-				cout << "发送磁盘信息成功" << endl;
-#endif
-#ifdef DVXWORK
-				logMsg("send DiskRets\n", 0, 0, 0, 0, 0, 0);
-#endif
+				
+				int ret = tclient.send(diskbuf, len);
+
 				if (ret < 0)
-				{
-#ifdef WIN32
-					cout << "发送磁盘信息成功" << endl;
-#endif
-#ifdef LINUX
-					cout << "发送磁盘信息成功" << endl;
-#endif
-#ifdef DVXWORK
-					logMsg("send DiskRets failed\n", 0, 0, 0, 0, 0, 0);
-#endif
-					//writeLog("send DiskRets failed.\n");
-				}
+					RUtil::printError("send disk info failed!");
+				else
+					RUtil::printError("send disk info success!");
+
 				delete diskbuf;
 			}
-
+			else{
+				RUtil::printError("disk client connect error!");
+			}
 		}
 	}
-#ifdef WIN32
-	closesocket(client);
-	WSACleanup();
-#endif
-#ifdef linux
-	close(client);
-#endif
-#ifdef DVXWORK
-	close(client);
-#endif
+
+	tclient.closeSocket();
 }

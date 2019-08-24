@@ -31,6 +31,11 @@ bld/
 
 # Visual Studio 2017 auto generated files
 Generated\ Files/
+*.sdf
+*.vcxproj
+*.v12
+
+cmake-build-debug/
 
 # MSTest test Results
 [Tt]est[Rr]esult*/

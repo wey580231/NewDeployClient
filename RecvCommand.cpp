@@ -1,107 +1,79 @@
-#include "Header.h"
+ï»¿#include "Header.h"
 #include "MyTime.h"
 #include "MyThread.h"
+#include "socket.h"
+#include "global.h"
+#include "RUtil.h"
 
-extern bool g_progFlag;
 
-// ½ÓÊÕ·şÎñÆ÷·¢ËÍµÄÃüÁîĞÅÏ¢£¬°üÀ¨É¨Ãè£¬²¿ÊğÖ¸Áî
+// æ¥æ”¶æœåŠ¡å™¨å‘é€çš„å‘½ä»¤ä¿¡æ¯ï¼ŒåŒ…æ‹¬æ‰«æï¼Œéƒ¨ç½²æŒ‡ä»¤
 void RecvCommand()
 {
-	int sockfd;
-	struct sockaddr_in saddr;
-	char recvline[382];
-	struct sockaddr_in presaddr;
+	RSocket tsocket;
+	if (!tsocket.createSocket(RSocket::R_UDP)){
+		RUtil::printError("create command socket error!");
+		return;
+	}
+
+	if (!tsocket.bind(nullptr, COMMAND)){
+		RUtil::printError("bind command socket error!");
+		return;
+	}
+
 	MyTime m_time;
 	MyThread m_thread;
 
-#ifdef WIN32
-	WSADATA wsa;
-	WSAStartup(MAKEWORD(2, 2), &wsa); //initial Ws2_32.dll by a process
-#endif
-	bool flag = true;
-	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-	if (sockfd < 0)
-	{
-		//writeLog("create serviceBroadcast failed.\n");
-		flag = false;
-	}
-
-	saddr.sin_family = AF_INET;
-	saddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	saddr.sin_port = htons(COMMAND);
-
-	if (flag == true && bind(sockfd, (struct sockaddr*)&saddr, sizeof(saddr)) < 0)
-	{
-		//writeLog("bind serviceBroadcast failed.\n");
-		flag = false;
-	}
-#ifdef WIN32
-	int len = sizeof(sockaddr_in);
-#endif
-#ifdef linux
-	socklen_t len = sizeof(sockaddr_in);
-#endif
-#ifdef DVXWORK
-	int len = sizeof(sockaddr_in);
-#endif
-	int r;
-	char sign[5];
-	char command[1];
-	while (flag&&g_progFlag)
+	char sign[5];				//æ¥æ”¶æŠ¥æ–‡æ ‡è¯†
+	char command[1];			//å‘½ä»¤ç±»å‹
+	char recvline[382];			//æ¥æ”¶æ•°æ®ç¼“å†²åŒº
+	unsigned short t_usRemotePort;
+	while (g_progFlag)
 	{
 		memset(recvline, 0, sizeof(recvline));
-		r = recvfrom(sockfd, recvline, sizeof(recvline), 0, (struct sockaddr*)&presaddr, &len);
+
+		int t_iRecvLen = tsocket.recvFrom(recvline, sizeof(recvline), nullptr, t_usRemotePort);
+		if (t_iRecvLen <= 0)
+			continue;
+
 		memset(sign, 0, 5);
-		// »ñµÃ±¨ÎÄ±êÊ¶
+		// è·å¾—æŠ¥æ–‡æ ‡è¯†
 		memcpy(sign, recvline, 4);
 		memcpy(command, recvline + 4, 1);
 
-		if (strcmp(sign, "S102") == 0) // ±íÊ¾È«ÅÌÉ¨Ãè
+		if (strcmp(sign, "S102") == 0) // è¡¨ç¤ºå…¨ç›˜æ‰«æ
 		{
-			m_time.CoutTime();
-#ifdef WIN32
-			cout << "ÊÕµ½È«ÅÌÉ¨Ãè±¨ÎÄ:S102" << endl;
-#endif
-#ifdef LINUX
-			cout << "ÊÕµ½È«ÅÌÉ¨Ãè±¨ÎÄ:S102" << endl;
-#endif
-#ifdef DVXWORK
-			logMsg("recv scan:S102\n", 0, 0, 0, 0, 0, 0);
-#endif
+			m_time.getTime();
+
+			RUtil::printError("recv command scan:S102");
+
 			Stru_Scans scans;
 			int index = 4;
 			memcpy(scans.browserID, recvline + index, sizeof(scans.browserID));
-			// »ñµÃÉêÇëID£¬¸ÃĞÅÏ¢ÊÇÔÚ·µ»ØÉ¨Ãè½á¹ûÊ±ÓĞĞ§£¬¶Ô±¾Èí¼şÎŞÒâÒå
+			// è·å¾—ç”³è¯·IDï¼Œè¯¥ä¿¡æ¯æ˜¯åœ¨è¿”å›æ‰«æç»“æœæ—¶æœ‰æ•ˆï¼Œå¯¹æœ¬è½¯ä»¶æ— æ„ä¹‰
 			index += sizeof(scans.browserID);
 			memcpy(scans.deviceID, recvline + index, sizeof(scans.deviceID));
-			// »ñµÃÉè±¸ID£¬¸ÃĞÅÏ¢ÊÇÔÚ·µ»ØÉ¨Ãè½á¹ûÊ±ÓĞĞ§£¬¶Ô±¾Èí¼şÎŞÒâÒå
+			// è·å¾—è®¾å¤‡IDï¼Œè¯¥ä¿¡æ¯æ˜¯åœ¨è¿”å›æ‰«æç»“æœæ—¶æœ‰æ•ˆï¼Œå¯¹æœ¬è½¯ä»¶æ— æ„ä¹‰
 			index += sizeof(scans.deviceID);
 			memcpy(scans.compID, recvline + index, sizeof(scans.compID));
 			index += sizeof(scans.compID);
-			// »ñµÃÉ¨ÃèÂ·¾¶
+			// è·å¾—æ‰«æè·¯å¾„
 			memcpy(scans.scanPath, recvline + index, sizeof(scans.scanPath));
 			printf("the scans Path:%s\n", scans.scanPath);
 			m_thread.FonudScanFiles(scans);
 		}
-		if (strcmp(sign, "S103") == 0) // ±íÊ¾¸ù¾İÖ¸¶¨ÀàĞÍÉ¨Ãè
+        else if (strcmp(sign, "S103") == 0) // è¡¨ç¤ºæ ¹æ®æŒ‡å®šç±»å‹æ‰«æ
 		{
-			m_time.CoutTime();
-#ifdef WIN32
-			cout << "ÊÕµ½¿ìËÙÉ¨Ãè±¨ÎÄ:S103" << endl;
-#endif
-#ifdef LINUX
-			cout << "ÊÕµ½È«ÅÌÉ¨Ãè±¨ÎÄ:S102" << endl;
-#endif
-#ifdef DVXWORK
-			logMsg("recv scan:S102\n", 0, 0, 0, 0, 0, 0);
-#endif
+			m_time.getTime();
+
+			RUtil::printError("recv command scan:S103");
+
 			Stru_Scans scans;
 			int index = 4;
 			memcpy(scans.browserID, recvline + index, sizeof(scans.browserID));
-			// »ñµÃÉêÇëID£¬¸ÃĞÅÏ¢ÊÇÔÚ·µ»ØÉ¨Ãè½á¹ûÊ±ÓĞĞ§£¬¶Ô±¾Èí¼şÎŞÒâÒå
+			// è·å¾—ç”³è¯·IDï¼Œè¯¥ä¿¡æ¯æ˜¯åœ¨è¿”å›æ‰«æç»“æœæ—¶æœ‰æ•ˆï¼Œå¯¹æœ¬è½¯ä»¶æ— æ„ä¹‰
 			index += sizeof(scans.browserID);
 			memcpy(scans.deviceID, recvline + index, sizeof(scans.deviceID));
-			// »ñµÃÉè±¸ID£¬¸ÃĞÅÏ¢ÊÇÔÚ·µ»ØÉ¨Ãè½á¹ûÊ±ÓĞĞ§£¬¶Ô±¾Èí¼şÎŞÒâÒå
+			// è·å¾—è®¾å¤‡IDï¼Œè¯¥ä¿¡æ¯æ˜¯åœ¨è¿”å›æ‰«æç»“æœæ—¶æœ‰æ•ˆï¼Œå¯¹æœ¬è½¯ä»¶æ— æ„ä¹‰
 			index += sizeof(scans.deviceID);
 			memcpy(scans.compID, recvline + index, sizeof(scans.compID));
 			index += sizeof(scans.compID);
@@ -110,23 +82,17 @@ void RecvCommand()
 			memcpy(scans.scanPath, recvline + index, sizeof(scans.scanPath));
 			m_thread.FonudScanFiles(scans);
 		}
-		if (strcmp(sign, "S105") == 0)
+		else if (strcmp(sign, "S105") == 0)   // è¡¨ç¤ºæ ¹æ®æŒ‡å®šç±»å‹æ‰«æ
 		{
-			m_time.CoutTime();
-#ifdef WIN32
-			cout << "ÊÕµ½½ø³ÌÉ¨Ãè±¨ÎÄ:S105" << endl;
-#endif
-#ifdef LINUX
+			m_time.getTime();
 
-#endif
-#ifdef DVXWORK
+			RUtil::printError("recv command scan:S105");
 
-#endif
 			Stru_Command com;
 			memset(com.command, 0, sizeof(com.command));
 			memset(com.sign, 0, sizeof(com.sign));
 			int index = 4;
-			// »ñÈ¡²éÑ¯ÀàĞÍ
+			// è·å–æŸ¥è¯¢ç±»å‹
 			memcpy(com.command, command, strlen(command));
 			index += sizeof(com.command);
 
@@ -145,23 +111,16 @@ void RecvCommand()
 			m_thread.FoundModuleProxy(module);
 
 		}
-		if (strcmp(sign, "S106") == 0)
+		else if (strcmp(sign, "S106") == 0)
 		{
-			m_time.CoutTime();
-#ifdef WIN32
-			cout << "ÊÕµ½´ÅÅÌÉ¨Ãè±¨ÎÄ:S106" << endl;
-#endif
-#ifdef LINUX
+			m_time.getTime();
 
-#endif
-#ifdef DVXWORK
-
-#endif
+			RUtil::printError("recv command scan:S106");
 			Stru_Command com;
 			memset(com.command, 0, sizeof(com.command));
 			memset(com.sign, 0, sizeof(com.sign));
 			int index = 4;
-			// »ñÈ¡²éÑ¯ÀàĞÍ
+			// è·å–æŸ¥è¯¢ç±»å‹
 			memcpy(com.command, command, strlen(command));
 			index += sizeof(com.command);
 
@@ -171,15 +130,5 @@ void RecvCommand()
 			m_thread.FoundDiskThread(disk);
 		}
 	}
-#ifdef WIN32
-	closesocket(sockfd);
-	WSACleanup();
-#endif
-#ifdef linux
-	close(sockfd);
-#endif
-#ifdef DVXWORK
-	close(sockfd);
-#endif
 }
 

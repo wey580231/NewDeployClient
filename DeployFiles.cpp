@@ -1,156 +1,94 @@
+ï»¿#include <fstream>
 #include "Header.h"
 #include "MyTime.h"
 #include "md5.h"
-#include "MyLog.h"
+#include "socket.h"
+#include "global.h"
+#include "RUtil.h"
 
-
-long long int processLen;			//½ø¶ÈÆ«ÒÆÁ¿
-char tailBuf[TAILBUFSIZE];			//´æ·ÅÕ³Á¬²¿·ÖµÄbuffer
+long long int processLen;			//è¿›åº¦åç§»é‡
+char tailBuf[TAILBUFSIZE];			//å­˜æ”¾ç²˜è¿éƒ¨åˆ†çš„buffer
 
 extern char* UTF8ToUniCode(const char* utf8, int srclen, int &len);
-extern bool g_progFlag;
-extern char serverIP[15];
 
-//²¿ÊğÎÄ¼ş
+void setRequestFlag(char * dest,const char * flag){
+	memset(dest, 0, 16);
+	strcpy(dest, flag);
+}
+
+//éƒ¨ç½²æ–‡ä»¶
 void DeployFiles()
 {
-	sockaddr_in addrSvr;
-#ifdef WIN32
-	int len = sizeof(sockaddr_in);
-#endif
-#ifdef LINUX
-	socklen_t len = sizeof(sockaddr_in);
-#endif
-#ifdef DVXWORK
-	int len = sizeof(sockaddr_in);
-#endif
-	int server;
-	bool flag = true;
-	MyTime m_time;
-	MyLog m_log;
+	RSocket tsocket;
 
-	server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if (server < 0)
-	{
-		//writeLog("deploy create socket failed.\n");
-		cout << "deploy create socket failed." << endl;
-		flag = false;
+	if (!tsocket.createSocket(RSocket::R_TCP)){
+		RUtil::printError("create deploy socket failed!");
+		return;
 	}
 
-	sockaddr_in service;
-	service.sin_family = AF_INET;
-	service.sin_addr.s_addr = htonl(INADDR_ANY);
-	service.sin_port = htons(DEPLOYPORT);
+	if (!tsocket.bind(nullptr, DEPLOYPORT)){
+		RUtil::printError("bind deploy socket failed!");
+		return;
+	}
+
+	if (!tsocket.listen()){
+		RUtil::printError("listen deploy socket failed!");
+		return;
+	}
+
 	int tcp_nodelay = 1;
-
-	if (setsockopt(server, SOL_SOCKET, SO_KEEPALIVE, (char*)&tcp_nodelay, sizeof(int)) < 0)
-	{
-		//writeLog("deploy set alive failed.\n");
-	}
-#ifdef WIN32
-	if (setsockopt(server, IPPROTO_TCP, TCP_NODELAY, (char*)&tcp_nodelay, sizeof(int)) < 0)
-	{
-		//writeLog("deploy set delay failed.\n");
-	}
-#endif
-#ifdef LINUX
-	if (setsockopt(server, IPPROTO_TCP, TCP_NODELAY, (char*)&tcp_nodelay, sizeof(int)) < 0)
-	{
-		//writeLog("deploy set delay failed.\n");
-	}
-#endif
-#ifdef DVXWORK
-
-#endif
-
-	if (flag == true && bind(server, (sockaddr *)&service, sizeof(sockaddr_in)) < 0)
-	{
-		//writeLog("deploy bind failed.\n");
-		flag = false;
-#ifdef WIN32
-		Sleep(100); // ¶¨Ê± 
-#endif
-#ifdef LINUX
-		usleep(100000);
-#endif
-#ifdef DVXWORK
-		slepp(1 / 10);
-#endif
-	}
-	// ¼àÌı socket
-	int ls = listen(server, 5);
-	if (ls == -1)
-	{
-		//writeLog("deploy listen failed.\n");
-		flag = false;
+	if (tsocket.setSockopt(SO_KEEPALIVE, (char*)&tcp_nodelay, sizeof(int)) != 0){
+		RUtil::printError("set deploy socket keepalive failed!");
+		return;
 	}
 
-	int AcceptSocket;
-	sockaddr_in client;
+	if (tsocket.setSockopt(TCP_NODELAY, (char*)&tcp_nodelay, sizeof(int), IPPROTO_TCP) != 0){
+		RUtil::printError("set deploy socket nodelay failed!");
+		return;
+	}
+
 	bool recvFlag;
-	// ¿ªÊ¼½ÓÊÕÎÄ¼ş
-	while (flag && g_progFlag)
+	char requestFlag[16];
+	MyTime m_time;
+	
+	while (g_progFlag)
 	{
-#ifdef WIN32
-		int addrsize = sizeof(client);
-#endif
-#ifdef LINUX
-		socklen_t addrsize = sizeof(client);
-#endif
-#ifdef DVXWORK
-		int addrsize = sizeof(client);
-#endif
-		AcceptSocket = accept(server, (sockaddr*)&client, &addrsize);
-		if (AcceptSocket > 10000)
-		{
+		RSocket tclient = tsocket.accept();
+		if (!tclient.isValid())
 			continue;
-		}
 
-		// ½ÓÊÜÎÄ¼ş´«ÊäÊı¾İ
+		// æ¥å—æ–‡ä»¶ä¼ è¾“æ•°æ®
 		int RecvLen;
-		char recvbuf[REVBUFSIZE] = ""; // ÓÃÓÚ½«½ÓÊÕµÄ×ª»»UTF8¸ñÊ½
+		char recvbuf[REVBUFSIZE] = ""; // ç”¨äºå°†æ¥æ”¶çš„è½¬æ¢UTF8æ ¼å¼
 
 		while (1)
 		{
-			// ÅĞ¶ÏÊÇ·ñ¿ªÊ¼½ÓÊÕÎÄ¼ş ÊÕµ½DeployStart±íÊ¾¿ªÊ¼½ÓÊÕ£¬DeployEnd
 			memset(recvbuf, 0, sizeof(recvbuf));
-			//(ÔÚTCPÀïÃæÊ¹ÓÃrecvfrom»á²»»á²»Ì«ºÃ£¬Ä¿µÄipµÄµØÖ·ĞÅÏ¢ÒÑ¾­ÔÚacceptÖĞ±£´æ¹ıÁË)
-			RecvLen = recvfrom(AcceptSocket, recvbuf, REVBUFSIZE, 0, (sockaddr*)&addrSvr, &len);
+			RecvLen = tclient.recv(recvbuf, REVBUFSIZE);
+
 			if (RecvLen <= 0)
 			{
-				int errorCode = WSAGetLastError();
+				int errorCode = tclient.getLastError();
+
 				if (errorCode == EWOULDBLOCK || errorCode == ETIMEDOUT)
 					continue;
 				else {
-#ifdef WIN32
-					cout << "ERROR>>>>>>>>>>>>>>>>>Client recv error£¡Has been exit recv_process." << endl;
-#endif
-#ifdef LINUX
-					cout << "ERROR>>>>>>>>>>>>>>>>>Client recv error£¡Has been exit recv_process." << endl;
-#endif
-#ifdef DVXWORK
-					logMsg("ERROR>>>>>>>>>>>>>>>>>Client recv error£¡Has been exit recv_process.\n", 0, 0, 0, 0, 0, 0);
-#endif	
+					RUtil::printError("deploy client recv error,code [%d]",errorCode);
 					break;
 				}
 			}
-			m_time.CoutTime();
-			//ÅĞ¶ÏÊÇ·ñ²¿Êğ½áÊø
+
+			RUtil::printError(m_time.getTime().c_str());
+
+			//åˆ¤æ–­æ˜¯å¦éƒ¨ç½²ç»“æŸ
 			int serialflag = 0;
 			memcpy((char*)&serialflag, recvbuf, 4);
+
 			if (serialflag == -1) {
-#ifdef WIN32
-				cout << "deploy end!" << endl;
-#endif
-#ifdef LINUX
-				cout << "deploy end!" << endl;
-#endif
-#ifdef DVXWORK
-				logMsg("deploy end!\n", 0, 0, 0, 0, 0, 0);
-#endif	
+				RUtil::printError("deploy end!");
 				break;
 			}
-			long long size = 0;//°üµÄ×Ü³¤¶È
+			long long size = 0;
 			memcpy((char*)&size, (recvbuf + SERINUMLENGTH + PATHLENGTH + MD5LENGTH), 8);
 
 			char path[PATHLENGTH];
@@ -159,207 +97,154 @@ void DeployFiles()
 			memset(md5, 0, MD5LENGTH);
 			memcpy(md5, (recvbuf + PATHLENGTH + SERINUMLENGTH), MD5LENGTH);
 
-			// ×ª»»ÎªUTF-8¸ñÊ½
+			// è½¬æ¢ä¸ºUTF-8æ ¼å¼
 #ifdef WIN32
-			char *convertBuf = UTF8ToUniCode(recvbuf, RecvLen, RecvLen);
-			memcpy(recvbuf, convertBuf, RecvLen);
-			delete convertBuf;
+//			char *convertBuf = UTF8ToUniCode(recvbuf, RecvLen, RecvLen);
+//			memcpy(recvbuf, convertBuf, RecvLen);
+//			delete convertBuf;
 #endif
-#ifdef LINUX
-			memcpy(recvbuf, recvbuf1, recvLenTemp);
-			RecvLen = recvLenTemp;
-#endif
-#ifdef DVXWORK
-			memcpy(recvbuf, recvbuf1, recvLenTemp);
-			RecvLen = recvLenTemp;
-#endif
+
 			memcpy(path, (recvbuf + SERINUMLENGTH), PATHLENGTH);
-#ifdef WIN32
-			cout << "Start Deploy>>>>>> " << path << endl;
-#endif
-#ifdef LINUX
-			cout << "Start Deploy>>>>>> " << path << endl;
-#endif
-#ifdef DVXWORK
-			logMsg("Start Deploy>>>>>> %s\n", path, 0, 0, 0, 0, 0);
-#endif	
+
+			RUtil::printError("Start Deploy>>>>>> %s", path);
+
 			DeployPackageEntity package(0, path, md5);
 			FILE* pFile = fopen(package.targetPath, "r");
-			//Èç¹ûµ±Ç°ÎÄ¼ş²»´æÔÚ£¬ÔòÍ¨Öª·şÎñÆ÷¿ªÊ¼·¢ËÍµ±Ç°ÎÄ¼şµÄ±¨ÎÄ
+			
+			//å¦‚æœå½“å‰æ–‡ä»¶ä¸å­˜åœ¨ï¼Œåˆ™é€šçŸ¥æœåŠ¡å™¨å¼€å§‹å‘é€å½“å‰æ–‡ä»¶çš„æŠ¥æ–‡
 			if (NULL == pFile)
 			{
-				char requestFlag[16];
-				memset(requestFlag, 0, 16);
-				strcpy(requestFlag, "t");
-				send(AcceptSocket, (const char*)requestFlag, strlen(requestFlag), 0);
+				setRequestFlag(requestFlag,"t");
+				tclient.send((const char*)requestFlag, strlen(requestFlag));
+
 				recvFlag = true;
 			}
 			else
 			{
-				//Èç¹û´æÔÚ£¬MD5Ò²Ò»ÖÂ£¬ÔòÍ¨Öª·şÎñÆ÷²¿ÊğÏÂÒ»¸öÎÄ¼ş
+				//å¦‚æœå­˜åœ¨ï¼ŒMD5ä¹Ÿä¸€è‡´ï¼Œåˆ™é€šçŸ¥æœåŠ¡å™¨éƒ¨ç½²ä¸‹ä¸€ä¸ªæ–‡ä»¶
 				MD5_CTX mdvalue;
 				char md5temp[34];
 				memset(md5temp, 0, 34);
 				mdvalue.GetFileMd5(md5temp, package.targetPath);
 				if (0 == strcmp(md5temp, package.MD5Value))
 				{
-					char requestFlag[16];
-					memset(requestFlag, 0, 16);
-					strcpy(requestFlag, "f");
-					send(AcceptSocket, (const char*)requestFlag, strlen(requestFlag), 0);
+					setRequestFlag(requestFlag, "f");
+
+					tclient.send((const char*)requestFlag, strlen(requestFlag));
+
 					recvFlag = false;
 					fclose(pFile);
 					continue;
 				}
 				else
 				{
-					//Èç¹ûÎÄ¼ş´æÔÚ£¬MD5Öµ²»Ò»ÖÂ£¬ÔòÖØĞÂ²¿Êğ¸ÃÎÄ¼ş
+					//å¦‚æœæ–‡ä»¶å­˜åœ¨ï¼ŒMD5å€¼ä¸ä¸€è‡´ï¼Œåˆ™é‡æ–°éƒ¨ç½²è¯¥æ–‡ä»¶
 					fclose(pFile);
 					//pFile = fopen(package.targetPath,"w");
-					char requestFlag[16];
-					memset(requestFlag, 0, 16);
-					strcpy(requestFlag, "t");
-					send(AcceptSocket, (const char*)requestFlag, strlen(requestFlag), 0);
+					setRequestFlag(requestFlag, "t");
+					tclient.send((const char*)requestFlag, strlen(requestFlag));
 					recvFlag = true;
 				}
 			}
 			if (size == 0)
 			{
-				char requestFlag[16];
-				memset(requestFlag, 0, 16);
-				strcpy(requestFlag, "c");
-				send(AcceptSocket, (const char*)requestFlag, strlen(requestFlag), 0);
+				setRequestFlag(requestFlag, "c");
+				tclient.send((const char*)requestFlag, strlen(requestFlag));
 				continue;
 			}
 
-			char *filepath = new char[256];
+			char filepath[256] = {0};
 			int filepathlen = 0;
-			memset(filepath, 0, 256);
-			//cout << "Start Deploy>>>>>> " << path << endl;
-			if (m_log.find_last_of(path, filepath, filepathlen) == true)
+
+			if (RUtil::find_last_of(path, filepath, filepathlen) == true)
 			{
-				// ÅĞ¶ÏÎÄ¼ş¼ĞÊÇ·ñ´æÔÚ£¬Èç¹û²»´æÔÚÔò´´½¨
-				int iRet = access(filepath, 0);
-				if (iRet != 0)
+				if(!RUtil::existedDir(filepath))
 				{
-					iRet = m_log.CreatDir(filepath);
-					if (iRet != 0)
-					{
-						// ½áÊø±¾´Î²¿Êğ
-						continue;
-					}
+					if (RUtil::creatDir(filepath) != 0)
+						continue;		// ç»“æŸæœ¬æ¬¡éƒ¨ç½²
 				}
 			}
 			else
-			{
-				// ½áÊø±¾´Î²¿Êğ
-				continue;
-			}
+				continue;	// ç»“æŸæœ¬æ¬¡éƒ¨ç½²
+
 			std::ofstream ofs;
-			// ´ò¿ªÎÄ¼ş¶ÁĞ´
 			ofs.open(path, ios::binary);
 
-			static int recveddatanum = 0;			//ÒÑ½ÓÊÕµÄÊı¾İ°ü³¤¶È
-			static int tailDataLength = 0;			//Õ³°üµÄ³¤¶È			
-			char* array_data;						//Êı¾İ¶Î
-			bool deployEnd = false;					//µ±Ç°ÎÄ¼ş²¿Êğ½áÊø±êÖ¾Î»
+			static int recveddatanum = 0;			//å·²æ¥æ”¶çš„æ•°æ®åŒ…é•¿åº¦
+			static int tailDataLength = 0;			//ç²˜åŒ…çš„é•¿åº¦	
+			bool deployEnd = false;					//å½“å‰æ–‡ä»¶éƒ¨ç½²ç»“æŸæ ‡å¿—ä½
 			memset(tailBuf, 0, TAILBUFSIZE);
 
 			if (recvFlag == true)
 			{
 				char recvdatabuf[REVBUFSIZE] = { 0 };
+
 				while (1)
 				{
-					//½ÓÊÕÊ±ÏŞ
-#ifdef WIN32
-					int nNetTimeout = 1000; //1Ãë
-					setsockopt(server, SOL_SOCKET, SO_RCVTIMEO, (char *)&nNetTimeout, sizeof(int));
-#endif
-#ifdef LINUX
-					struct timeval timeout = { 10,0 };// 10Ãë
-					//½ÓÊÕÊ±ÏŞ
-					setsockopt(server, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(int));
-#endif
-#ifdef DVXWORK
-					struct timeval timeout = { 10,0 };// 10Ãë
-					//½ÓÊÕÊ±ÏŞ
-					setsockopt(server, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeval));
-#endif			
-					static int RecvDataLen;
+					static int t_iRecvLen;
 
 					memset(recvdatabuf, 0, sizeof(recvdatabuf));
-					RecvDataLen = recvfrom(AcceptSocket, recvdatabuf, REVBUFSIZE, 0, (sockaddr*)&addrSvr, &len);
-					//²¶»ñrecvfromµÄÒì³£Çé¿ö£¬²¶»ñµ½ĞÅºÅÖĞ¶ÏºÍ½ÓÊÕ³¬Ê±£¬Ôò¼ÌĞøÖØĞÂ½ÓÊÕ£¬·ñÔòÍË³öµ±Ç°½ÓÊÕ
-					if (RecvDataLen <= 0)
+					
+					t_iRecvLen = tclient.recv(recvdatabuf, REVBUFSIZE);
+
+					if (t_iRecvLen <= 0)
 					{
-						int errorCode = WSAGetLastError();
+						int errorCode = tclient.getLastError();
+
 						if (errorCode == EWOULDBLOCK || errorCode == ETIMEDOUT)
 							continue;
 						else {
-#ifdef WIN32
-							cout << "ERROR>>>>>>>>>>>>>>>>>Client recv error£¡Has been exit recv_process." << endl;
-#endif
-#ifdef LINUX
-							cout << "ERROR>>>>>>>>>>>>>>>>>Client recv error£¡Has been exit recv_process." << endl;
-#endif
-#ifdef DVXWORK
-							logMsg("ERROR>>>>>>>>>>>>>>>>>Client recv error£¡Has been exit recv_process.\n", path, 0, 0, 0, 0, 0);
-#endif	
+							RUtil::printError("deploy client recv error,code [%d]",errorCode);
 							break;
 						}
 					}
+
 					bool hasTailBuff = false;
 					char * newBuff = NULL;
 					int newBuffLen;
-					//ÅĞ¶ÏÕ³Á¬bufÖĞÊÇ·ñ´æÔÚ¶«Î÷£¬´æÔÚÔò½«ÆäÖĞµÄ¶«Î÷ÓëÊÕµ½µÄĞÂµÄrecvdatabuf½øĞĞÆ´½Ó
+					
+					//åˆ¤æ–­ç²˜è¿bufä¸­æ˜¯å¦å­˜åœ¨ä¸œè¥¿ï¼Œå­˜åœ¨åˆ™å°†å…¶ä¸­çš„ä¸œè¥¿ä¸æ”¶åˆ°çš„æ–°çš„recvdatabufè¿›è¡Œæ‹¼æ¥
 					if (tailDataLength != 0) {
-						newBuffLen = RecvDataLen + tailDataLength;
+						newBuffLen = t_iRecvLen + tailDataLength;
 						newBuff = (char *)malloc(newBuffLen);
 						memcpy(newBuff, tailBuf, tailDataLength);
-						memcpy(newBuff + tailDataLength, recvdatabuf, RecvDataLen);
+						memcpy(newBuff + tailDataLength, recvdatabuf, t_iRecvLen);
 						hasTailBuff = true;
 					}
 					else {
 						newBuff = recvdatabuf;
-						newBuffLen = RecvDataLen;
+						newBuffLen = t_iRecvLen;
 					}
+
 					processLen = 0;
 					do {
-						//¼´½«½âÎöµÄbufÊ£Óà³¤¶ÈÊÇ·ñ×ãÒÔ½âÎöÒ»¸ö±¨ÎÄÍ·£¬×ã¹»½âÎöÔòÏÈ½âÎöÒ»¸öÍ·²¿
-						if (newBuffLen - processLen >= sizeof(HeadPacket)) {
+						//å³å°†è§£æçš„bufå‰©ä½™é•¿åº¦æ˜¯å¦è¶³ä»¥è§£æä¸€ä¸ªæŠ¥æ–‡å¤´ï¼Œè¶³å¤Ÿè§£æåˆ™å…ˆè§£æä¸€ä¸ªå¤´éƒ¨
+						if (newBuffLen - processLen >= sizeof(HeadPacket)) 
+						{
 							HeadPacket head;
 							memcpy((char*)&head, newBuff + processLen, sizeof(head));
-							//½âÎöÍêÍ·²¿Ê£ÓàµÄbuf³¤¶ÈÊÇ·ñ×ã¹»½âÎöÒ»¸öµ¥²½³¤¶È£¬×ã¹»Ôò½âÎö£¬²»¹»Ôò½«Æä±£ÁôÏÂÀ´¼ÌĞøÈ¥½ÓÊÕĞÂµÄ±¨ÎÄ
-							if (newBuffLen - processLen - sizeof(head) >= head.dataSize) {
+							//è§£æå®Œå¤´éƒ¨å‰©ä½™çš„bufé•¿åº¦æ˜¯å¦è¶³å¤Ÿè§£æä¸€ä¸ªå•æ­¥é•¿åº¦ï¼Œè¶³å¤Ÿåˆ™è§£æï¼Œä¸å¤Ÿåˆ™å°†å…¶ä¿ç•™ä¸‹æ¥ç»§ç»­å»æ¥æ”¶æ–°çš„æŠ¥æ–‡
+							if (newBuffLen - processLen - sizeof(head) >= head.dataSize) 
+							{
 								processLen += sizeof(head);
 
-								//¿É½âÎöÒ»´Î
-								char* array_data;
-								array_data = (char*)malloc(head.dataSize);
-								memcpy(array_data, newBuff + processLen, head.dataSize);
+								//å¯è§£æä¸€æ¬¡
+								char* array_data = newBuff + processLen;
 								processLen += head.dataSize;
-								//¼ÇÂ¼ÒÑ½ÓÊÕµÄÊı¾İ×Ü³¤¶È
+								
+								//è®°å½•å·²æ¥æ”¶çš„æ•°æ®æ€»é•¿åº¦
 								recveddatanum += head.dataSize;
-								//Èç¹ûÒÑÊÕµÄ±¨ÎÄ×Ö½Ú³¤¶ÈµÈÓÚ±¨ÎÄµÄ×Ü³¤¶È£¬Ôò¸ÃÎÄ¼ş½ÓÊÕÍê±Ï£¬Í¨Öª·şÎñÆ÷²¿ÊğÏÂÒ»¸öÂ·¾¶
+								//å¦‚æœå·²æ”¶çš„æŠ¥æ–‡å­—èŠ‚é•¿åº¦ç­‰äºæŠ¥æ–‡çš„æ€»é•¿åº¦ï¼Œåˆ™è¯¥æ–‡ä»¶æ¥æ”¶å®Œæ¯•ï¼Œé€šçŸ¥æœåŠ¡å™¨éƒ¨ç½²ä¸‹ä¸€ä¸ªè·¯å¾„
 								if (recveddatanum == head.totalSize) {
 									ofs.write(array_data, head.dataSize);
 									ofs.close();
 									ofs.clear();
-									//Í¨Öª·şÎñÆ÷¸ÃÎÄ¼şÒÑ¾­²¿Êğ½áÊø£¬¿ªÊ¼´«ÊäÏÂÒ»¸öÂ·¾¶
-									char requestFlag[16];
-									memset(requestFlag, 0, 16);
-									strcpy(requestFlag, "c");
-									int realSendLen = send(AcceptSocket, (const char*)requestFlag, strlen(requestFlag), 0);
+									//é€šçŸ¥æœåŠ¡å™¨è¯¥æ–‡ä»¶å·²ç»éƒ¨ç½²ç»“æŸï¼Œå¼€å§‹ä¼ è¾“ä¸‹ä¸€ä¸ªè·¯å¾„
+									setRequestFlag(requestFlag, "c");
+									int realSendLen = tclient.send((const char*)requestFlag, strlen(requestFlag));
+
 									if (realSendLen <= 0) {
-#ifdef WIN32
-										cout << "Send request error" << endl;
-#endif
-#ifdef LINUX
-										cout << "Send request error" << endl;
-#endif
-#ifdef DVXWORK
-										logMsg("Send request error\n", path, 0, 0, 0, 0, 0);
-#endif	
+										RUtil::printError("deploy client Send request error");
 										break;
 									}
 
@@ -371,7 +256,7 @@ void DeployFiles()
 								else {
 									ofs.write(array_data, head.dataSize);
 								}
-								//Èç¹ûÆ«ÒÆÁ¿ºÍ½âÎö±¨ÎÄµÄ×Ü³¤¶ÈÏàµÈ£¬ÔòÕ³Á¬bufÖĞµÄÄÚÈİÒÑ´¦ÀíÍê±Ï
+								//å¦‚æœåç§»é‡å’Œè§£ææŠ¥æ–‡çš„æ€»é•¿åº¦ç›¸ç­‰ï¼Œåˆ™ç²˜è¿bufä¸­çš„å†…å®¹å·²å¤„ç†å®Œæ¯•
 								if (processLen == newBuffLen) {
 									tailDataLength = 0;
 									break;
@@ -394,12 +279,12 @@ void DeployFiles()
 						}
 					} while (1);
 
-					//Èç¹û´ËÊ±½âÎöµÄbuf²»µÈÓÚ¿Õ²¢ÇÒ±êÖ¾Î»ÎªtrueÔòĞèÒªÊÍ·Å¿ª±ÙµÄbufÄÚ´æ
+					//å¦‚æœæ­¤æ—¶è§£æçš„bufä¸ç­‰äºç©ºå¹¶ä¸”æ ‡å¿—ä½ä¸ºtrueåˆ™éœ€è¦é‡Šæ”¾å¼€è¾Ÿçš„bufå†…å­˜
 					if (newBuff != NULL && hasTailBuff)
 						free(newBuff);
-					//Èç¹ûµ±Ç°ÎÄ¼şµÄ²¿Êğ½áÊø±êÖ¾Îªtrue£¬ÔòÌø³öµ±Ç°µÄwhileÑ­»·£¬È¥½ÓÊÕĞÂµÄ²¿ÊğÂ·¾¶
+
+					//å¦‚æœå½“å‰æ–‡ä»¶çš„éƒ¨ç½²ç»“æŸæ ‡å¿—ä¸ºtrueï¼Œåˆ™è·³å‡ºå½“å‰çš„whileå¾ªç¯ï¼Œå»æ¥æ”¶æ–°çš„éƒ¨ç½²è·¯å¾„
 					if (deployEnd == true) {
-						free(filepath);
 						filepathlen = 0;
 						break;
 					}
@@ -407,14 +292,6 @@ void DeployFiles()
 			}
 		}
 	}
-#ifdef WIN32
-	closesocket(server);
-	WSACleanup();
-#endif
-#ifdef linux
-	close(server);
-#endif
-#ifdef DVXWORK
-	close(server);
-#endif
+	
+	tsocket.closeSocket();
 }

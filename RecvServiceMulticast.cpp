@@ -1,24 +1,19 @@
-#include "Header.h"
-
-extern char serverIP[15];
-extern char hostIP[15];
-extern bool g_progFlag;
-
-
+ï»¿#include "Header.h"
+#include "global.h"
+#include "socket.h"
+#include "RUtil.h"
 
 bool AnalysisFile()
 {
-	bool rState;//·µ»Ø×´Ì¬
+	bool rState;
 	FILE *file;
 	char ln[80];
 #ifdef WIN32
 	fopen_s(&file, "returnpingdata.txt", "r");
-#endif
-#ifdef LINUX
+#elif linux
 	//fopen_s(&file,"w");
 	return false;
-#endif
-#ifdef DVXWORK
+#elif DVXWORK
 	/*char filePath[128];
 	memset(filePath,0,128);
 	string path = "/ata0a/deployClient/NewDeployClient/returnpingdata.txt";
@@ -28,13 +23,13 @@ bool AnalysisFile()
 		return false;*/
 #endif
 
-	fgets(ln, 80, file);//¶ÁÈë¿ÕÐÐ£¬ÉáÆú
-	fgets(ln, 80, file);//¶ÁÈëpingÐÅÏ¢£¬ÉáÆú
-	fgets(ln, 80, file);//¶ÁÈëping¶ÔÏó·µ»ØÖµ£¬ÓÃÀ´·ÖÎö
+	fgets(ln, 80, file);//è¯»å…¥ç©ºè¡Œï¼Œèˆå¼ƒ
+	fgets(ln, 80, file);//è¯»å…¥pingä¿¡æ¯ï¼Œèˆå¼ƒ
+	fgets(ln, 80, file);//è¯»å…¥pingå¯¹è±¡è¿”å›žå€¼ï¼Œç”¨æ¥åˆ†æž
 
 	string data = ln;
 	int iPos = data.find("=");
-	data = data.substr(iPos + 1, 3);//½ØÈ¡×Ö·û´®·µ»Ø×Ö½ÚÊý
+	data = data.substr(iPos + 1, 3);
 	int  n = atoi(data.c_str());
 	rState = n > 0;
 	fclose(file);
@@ -44,165 +39,69 @@ bool AnalysisFile()
 void RecvServiceMulticast()
 {
 	int r;
-	char recvline[20];
-	struct sockaddr_in presaddr;
 
-#ifdef WIN32
-	WSADATA wsa;
-	WSAStartup(MAKEWORD(2, 2), &wsa); //initial Ws2_32.dll by a process,
-#endif
-	bool flag = true;
-	SOCKET sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	if (INVALID_SOCKET == sockfd)
-	{	
-#ifdef WIN32
-		cout << "create serviceBroadcast failed!";
-#endif
-#ifdef LINUX
-		printf("create serviceBroadcast failed!\n");
-#endif
-#ifdef DVXWORK
-		logMsg("create serviceBroadcast failed!\n", 0, 0, 0, 0, 0, 0);
-#endif
-		flag = false;
+	RSocket tsocket;
+	if (!tsocket.createSocket(RSocket::R_UDP)){
+		RUtil::printError("create serviceBroadcast socket error!");
 		return;
 	}
 
-	struct sockaddr_in saddr;
-	memset(&saddr, 0, sizeof(saddr));
-	saddr.sin_family = AF_INET;
-	saddr.sin_port = htons(BOARDCASTPORT);
+    int t_iReuseAddr = 1;
+    if(tsocket.setSockopt(SO_REUSEADDR,(char *)&t_iReuseAddr,sizeof(t_iReuseAddr))!= 0){
+        RUtil::printError("serviceBroadcast reuseaddr error!");
+        return;
+    }
 
-#ifdef WIN32
-	saddr.sin_addr.s_addr = inet_addr(hostIP);
-#endif
-#ifdef LINUX
-	saddr.sin_addr.s_addr = htonl(INADDR_ANY);
-#endif
-#ifdef DVXWORK
-	saddr.sin_addr.s_addr = htonl(INADDR_ANY);
+#ifdef linux
+    if(tsocket.setSockopt(SO_REUSEPORT,(char *)&t_iReuseAddr,sizeof(t_iReuseAddr))!= 0){
+        RUtil::printError("serviceBroadcast reuseport error!");
+        return;
+    }
 #endif
 
-	// ½«Ì×½Ó×Ö°ó¶¨µ½±¾µØµØÖ·½á¹¹
-	bind(sockfd, (struct sockaddr *)&saddr, sizeof(saddr));
-	if (bind < 0)
-	{
-		cout << "bind failed" << endl;
-		flag = false;
+	if (!tsocket.bind(hostIP, BOARDCASTPORT)){
+		RUtil::printError("bind serviceBroadcast socket error!");
+		return;
 	}
 
-	// ¼ÓÈë×é²¥µØÖ·
-	ip_mreq mreq;
-	mreq.imr_interface.S_un.S_addr = inet_addr(hostIP);     //±¾µØÄ³Ò»ÍøÂçÉè±¸½Ó¿ÚµÄIPµØÖ·¡£
-	mreq.imr_multiaddr.S_un.S_addr = inet_addr("224.10.10.15"); //×é²¥×éµÄIPµØÖ·¡£
-	int ret = setsockopt(sockfd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char*)&mreq, sizeof(mreq));
-	if (ret < 0)
-	{
-#ifdef WIN32
-		cout << "setsockopt error----------ÇëÖØÐÂÅäÖÃip" << endl;
-#endif
-#ifdef LINUX
-		cout << "setsockopt error----------ÇëÖØÐÂÅäÖÃip" << endl;
-#endif
-#ifdef DVXWORK
-		logMsg("setsockopt error----------ÇëÖØÐÂÅäÖÃip\n", 0, 0, 0, 0, 0, 0);
-#endif
-		flag = false;
+	if (!tsocket.joinGroup(hostIP, "224.10.10.15")){
+		RUtil::printError("join group error!");
+		return;
 	}
 
-#ifdef WIN32
-	int len = sizeof(sockaddr_in);
-#endif
-#ifdef LINUX
-	socklen_t len = sizeof(sockaddr_in);
-#endif
-#ifdef DVXWORK
-	int len = sizeof(sockaddr_in);
-#endif
+	if (tsocket.setRecvTimeOut(10000) != 0){
+		RUtil::printError("set serviceBroadcast recv timeout error!");
+		return;
+	}
+
+    socklen_t len = sizeof(sockaddr_in);
+	char t_remoteIp[20] = {0};
+	unsigned short t_usRemotePort = 0;
 	char sign[5];
-	while (flag&&g_progFlag)
+	char recvline[20];
+	while (g_progFlag)
 	{
-#ifdef WIN32
-		int nNetTimeout = 10000; //10Ãë
-		//½ÓÊÕÊ±ÏÞ
-		int back = setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&nNetTimeout, sizeof(int));
-#endif
-#ifdef LINUX
-		struct timeval timeout = { 10,0 };// 10Ãë
-		//½ÓÊÕÊ±ÏÞ
-		int back = setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeval));
-#endif
-#ifdef DVXWORK
-		struct timeval timeout = { 10,0 };// 10Ãë
-		//½ÓÊÕÊ±ÏÞ
-		int back = setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeval));
-#endif
-
-#ifdef WIN32
-		if (back)
-		{
-			printf("win setsockopt error----------ÉèÖÃÑÓÊ±´íÎó\n");
-			closesocket(sockfd);
-			WSACleanup();
-			RecvServiceMulticast();
-			return;
-		}
-#endif
-#ifdef LINUX
-		if (back < 0)
-		{
-			cout << "linux setsockopt error----------ÉèÖÃÑÓÊ±´íÎó" << back << endl;
-			close(sockfd);
-			RecvServiceMulticast();
-			return;
-		}
-#endif
-#ifdef DVXWORK
-		if (back)
-		{
-			logMsg("vxworks setsockopt error----------set timeo error\n", 0, 0, 0, 0, 0, 0);
-			close(sockfd);
-			RecvServiceMulticast();
-			return;
-		}
-#endif
 		memset(recvline, 0, 20);
-		r = recvfrom(sockfd, recvline, sizeof(recvline), 0, (struct sockaddr*)&presaddr, &len);
+		
+		r = tsocket.recvFrom(recvline, sizeof(recvline), t_remoteIp, t_usRemotePort);
 		if (r <= 0)
-		{
-#ifdef WIN32
-			cout << "ÍøÂçÁ¬½Ó´íÎó£¬Çë¼ì²éÅäÖÃÎÄ¼þÖÐµÄip" << endl;
-			closesocket(sockfd);
-			WSACleanup();
-#endif
-#ifdef LINUX
-			cout << "Î´½ÓÊÕµ½·þÎñÆ÷×é²¥µÄÐÅÏ¢" << endl;
-			close(sockfd);
-#endif
-#ifdef DVXWORK
-			logMsg("no recv server info\n", 0, 0, 0, 0, 0, 0);
-			close(sockfd);
-#endif
-			RecvServiceMulticast();
-			return;
-		}
+			continue;
 
 		memset(sign, 0, 5);
-		// »ñµÃ±¨ÎÄ±êÊ¶
+		// èŽ·å¾—æŠ¥æ–‡æ ‡è¯†
 		memcpy(sign, recvline, 4);
 		if (strcmp(sign, "S101") == 0)
 		{
-			// »ñµÃ·þÎñÆ÷µÄIPµØÖ·
+			// èŽ·å¾—æœåŠ¡å™¨çš„IPåœ°å€
 			memcpy(serverIP, recvline + 4, r - 4);
 #ifdef WIN32
-			//¿ª·Å100,·ÀÖ¹Êý×éÔ½½ç
 			char frontstr[100] = "cmd /c ping ";
 			strncat(frontstr, serverIP, sizeof(serverIP));
 			char afterstr[100] = " -n 1 -w 1000 >returnpingdata.txt";
 			strncat(frontstr, afterstr, sizeof(afterstr));
 
 			WinExec((char*)frontstr, SW_HIDE);
-			Sleep(1000);//µÈ´ý1000ms
+			Sleep(1000);
 			bool returndata = AnalysisFile();
 			if (returndata == false)
 			{
@@ -211,33 +110,26 @@ void RecvServiceMulticast()
 			else if (returndata == true)
 			{
 				cout << "server_IP: " << serverIP << "   connect success!" << endl;
-				memset(frontstr, 0, sizeof(frontstr));
 				break;
-			}	
-#endif
-#ifdef LINUX
-			/*char frontstr[50] = "cmd /c ping ";
-			strncat(frontstr,serverIP,sizeof(serverIP));
-			char afterstr[50] = " -n 1 -w 1000 >returnpingdata.txt";
-			strncat(frontstr,afterstr,sizeof(afterstr));
-			WinExec((char*)frontstr, SW_HIDE);
-			Sleep(1000);//µÈ´ý1000ms
-			*/
+			}
+#elif linux
+            //NOTE 2019-08-23 linuxåªpingæœåŠ¡å™¨,ä¸æ£€æµ‹æ˜¯å¦å¯ä»¥pingé€šï¼ˆæ— æ„ä¹‰ï¼‰
+			char command[80] = {0};
+			string tmp = " ping ";
+			strncat(command,tmp.c_str(),strlen(tmp.c_str()));
+			strncat(command,serverIP,strlen(serverIP));
+			tmp = " -c4 > `pwd`/returnpingdata.txt ";
+			strncat(command,tmp.c_str(),strlen(tmp.c_str()));
 
-#endif
-#ifdef DVXWORK
+			RUtil::printError("recv server ip:%s",serverIP);
 
+			if(popen(command,"r") == nullptr){
+				RUtil::printError("exec command [%s] error.",command);
+				break;
+			}
 #endif
 		}
 	}
-#ifdef WIN32
-	closesocket(sockfd);
-	WSACleanup();
-#endif
-#ifdef linux
-	close(sockfd);
-#endif
-#ifdef DVXWORK
-	close(sockfd);
-#endif
+
+	tsocket.closeSocket();
 }

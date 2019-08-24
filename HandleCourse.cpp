@@ -1,14 +1,23 @@
+ï»¿/*!
+*  @brief     è·å–ç³»ç»Ÿè¿›ç¨‹ä¿¡æ¯
+*  @details   è·å–å½“å‰æ“ä½œç³»ç»Ÿçš„è¿›ç¨‹ä¿¡æ¯ï¼Œä»¥tcpå®¢æˆ·ç«¯å½¢å¼ï¼Œå°†æ•°æ®å‘é€è‡³æœåŠ¡å™¨ã€‚
+*  @author    wey
+*  @version   1.0
+*  @date      2019.08.22
+*  @warning
+*  @copyright NanJing RenGu.
+*  @note
+*/
 #include "Header.h"
 #include "MyTime.h"
+#include "RUtil.h"
+#include "global.h"
+#include "socket.h"
 
-extern bool g_progFlag;
-extern char serverIP[15];
 MyTime m_time;
 
-
-
-
-//Í¨¹ı½ø³ÌID»ñÈ¡½ø³Ì¾ä±ú
+#ifdef WIN32
+//é€šè¿‡è¿›ç¨‹IDè·å–è¿›ç¨‹å¥æŸ„
 HANDLE GetProcessHandle(int nID)
 {
 	return OpenProcess(PROCESS_ALL_ACCESS, FALSE, nID);
@@ -20,11 +29,17 @@ int GetProcessMemory(HANDLE handle)
 	PROCESS_MEMORY_COUNTERS pmc;
 	GetProcessMemoryInfo(handle, &pmc, sizeof(pmc));
 	//printf("pid=%d,bytes=%d,kb=%d\n", GetCurrentProcessId(), pmc.WorkingSetSize, int(pmc.WorkingSetSize / 1024));
-	return pmc.WorkingSetSize / 1024;	
+	return pmc.WorkingSetSize / 1024;
 }
+#endif
 
 
-//»ñÈ¡µ±Ç°½ø³ÌµÄÃû³Æ¡¢×´Ì¬
+/*!
+* @brief è·å–å½“å‰è¿›ç¨‹çš„åç§°ã€çŠ¶æ€
+* @date 2019-08-23
+* @warning ã€1ã€‘è‹¥å‡ºç° Stack around the variable 'a_memory' was corrupted.é”™è¯¯ï¼Œåˆ™æŒ‰ç…§ã€https://www.cnblogs.com/flysnail/archive/2011/09/21/2184114.htmlã€‘è®¾ç½®é¡¹ç›®å·¥ç¨‹å±æ€§
+*          ã€2ã€‘è‹¥åœ¨releaseä¸‹å‡ºç°_security_cookieçš„é”™è¯¯ï¼Œè¯´æ˜vså¯¹ç¼“å†²åŒºè¿›è¡Œæº¢å‡ºæ£€æŸ¥ï¼Œè¿™æ—¶åœ¨å±æ€§-ã€‹å±æ€§-ã€‹c++ -ã€‹ä»£ç ç”Ÿæˆï¼šç¼“å†²åŒºå®‰å…¨æ£€æŸ¥ æ”¹ä¸º å¦ (/GS-)
+*/
 void GetModuleInfo(char *processID, char *processName, char *priority, char *processMemory, vector<Stru_ModuleRets> &moduleList)
 {
 #ifdef WIN32
@@ -41,7 +56,7 @@ void GetModuleInfo(char *processID, char *processName, char *priority, char *pro
 	{
 		if (strlen(szTest) != 0)
 		{
-			szTest[1023] = '\0';    //Êı×é²¹Æë£¬Òª²»»á±¨Ô½½ç´íÎó
+			szTest[1023] = '\0';    
 			temp = szTest;
 			while (1)
 			{
@@ -51,14 +66,16 @@ void GetModuleInfo(char *processID, char *processName, char *priority, char *pro
 					count++;
 					if (count == 2)
 					{
+						//æ˜ åƒåç§°
 						memset(moduleRets.processName, 0, sizeof(moduleRets.processName));
 						strcpy(moduleRets.processName, temp.substr(1, (subscript - 1)).c_str());
-						temp_count = subscript;						
+						temp_count = subscript;
 					}
 					else if (count == 4)
 					{
+						//PID
 						memset(moduleRets.processID, 0, sizeof(moduleRets.processID));
-						strcpy(moduleRets.processID, temp.substr((temp_count + 3), (subscript - temp_count - 3)).c_str());					
+						strcpy(moduleRets.processID, temp.substr((temp_count + 3), (subscript - temp_count - 3)).c_str());
 						memset(moduleRets.priority, 0, 8);
 					}
 					else if (count == 8)
@@ -67,6 +84,7 @@ void GetModuleInfo(char *processID, char *processName, char *priority, char *pro
 					}
 					else if (count == 10)
 					{
+						//å†…å­˜ä½¿ç”¨
 						memset(moduleRets.processMemory, 0, sizeof(moduleRets.processMemory));
 						int pid = atoi(moduleRets.processID);
 						int c_memory = 0;
@@ -100,7 +118,7 @@ void GetModuleInfo(char *processID, char *processName, char *priority, char *pro
 	}
 	_pclose(fp);
 #endif
-#ifdef LINUX
+#ifdef linux
 	Stru_ModuleRets moduleRets;
 	FILE* fp;
 	char szTest[1024];
@@ -112,14 +130,13 @@ void GetModuleInfo(char *processID, char *processName, char *priority, char *pro
 		{
 			memset(szTest, 0, sizeof(szTest));
 			fgets(szTest, sizeof(szTest) - 1, fp);
-			szTest[1023] = '\0';    //Êı×é²¹Æë£¬Òª²»»á±¨Ô½½ç´íÎó
+			szTest[1023] = '\0';   
 			temp = szTest;
 			memset(moduleRets.processName, 0, 128);
 			strcpy(moduleRets.processName, temp.substr(0, 8).c_str());
 			memset(moduleRets.processID, 0, 5);
 			strcpy(moduleRets.processID, temp.substr(11, 4).c_str());
-			//            qDebug() << moduleRets.processName;
-			//            qDebug() << moduleRets.processID;
+
 			memset(moduleRets.priority, 0, 8);
 			moduleList.push_back(moduleRets);
 		}
@@ -155,43 +172,32 @@ void GetModuleInfo(char *processID, char *processName, char *priority, char *pro
 #endif
 }
 
-// Í¨¹ıtcp·µ»Ø½ø³Ì½á¹û
+// é€šè¿‡tcpè¿”å›è¿›ç¨‹ç»“æœ
 void SendModuleRets(Stru_ModuleRetReco moduleRet)
 {
-#ifdef WIN32
-	WSADATA wsa;
-	WSAStartup(MAKEWORD(2, 2), &wsa); //initial Ws2_32.dll by a process
+	RSocket tclient;
+	if (!tclient.createSocket(RSocket::R_TCP)){
+		RUtil::printError("create send disk socket error!");
+		return;
+	}
 
-#endif
-	int client;
-	bool flag = true;
-	client = socket(AF_INET, SOCK_STREAM, 0);
-	if (client < 0)
-	{
-		flag = false;
-		//writeLog("create module failed.\n");
-	}sockaddr_in server;
-	if (flag&&g_progFlag)
+	if (g_progFlag)
 	{
 		if (strcmp(serverIP, "0.0.0.0") != 0)
 		{
-			server.sin_family = AF_INET; // TCP/IP
-			server.sin_addr.s_addr = inet_addr(serverIP);;
-			server.sin_port = htons(SCANRETS);
-			if (connect(client, (struct sockaddr*)&server, sizeof(struct sockaddr)) < 0)
-			{
-				//writeLog("module connect failed\n");
-			}
-			else
-			{
-				int len = sizeof(moduleRet) + moduleRet.taskNum * (5 + 128 + 8 + 8);
+			if (tclient.connect(serverIP, SCANRETS)){
+				int len = sizeof(moduleRet)+moduleRet.taskNum * (5 + 128 + 8 + 8);
+				
 				char *modulebuf = new char[len];
 				memset(modulebuf, 0, len);
 				int index = 0;
-				memcpy(modulebuf, moduleRet.sign, sizeof(moduleRet.sign));						//±¨ÎÄ±êÊ¶
+				
+				memcpy(modulebuf, moduleRet.sign, sizeof(moduleRet.sign));						//æŠ¥æ–‡æ ‡è¯†
 				index += sizeof(moduleRet.sign);
-				memcpy(modulebuf + index, moduleRet.browserID, sizeof(moduleRet.browserID));		// ÉêÇëIDºÅ
+				
+				memcpy(modulebuf + index, moduleRet.browserID, sizeof(moduleRet.browserID));	// ç”³è¯·IDå·
 				index += sizeof(moduleRet.browserID);
+				
 				for (int i = 0; i < moduleRet.taskNum; i++)
 				{
 					memcpy(modulebuf + index, moduleRet.ModuleRets[i].processID, sizeof(moduleRet.ModuleRets[i].processID));
@@ -203,44 +209,21 @@ void SendModuleRets(Stru_ModuleRetReco moduleRet)
 					memcpy(modulebuf + index, moduleRet.ModuleRets[i].processMemory, sizeof(moduleRet.ModuleRets[i].processMemory));
 					index += sizeof(moduleRet.ModuleRets[i].processMemory);
 				}
-				int ret = send(client, (const char*)modulebuf, len, 0);
-#ifdef WIN32
-				cout << "·¢ËÍ½ø³ÌĞÅÏ¢³É¹¦" << endl;
-#endif
-#ifdef LINUX
-				cout << "·¢ËÍ½ø³ÌĞÅÏ¢³É¹¦" << endl;
-#endif
-#ifdef DVXWORK
-				logMsg("send ModuleRets\n", 0, 0, 0, 0, 0, 0);
-#endif
+				int ret = tclient.send(modulebuf, len); 
+
 				if (ret < 0)
-				{
-#ifdef WIN32
-					cout << "·¢ËÍ½ø³ÌĞÅÏ¢Ê§°Ü" << endl;
-#endif
-#ifdef LINUX
-					cout << "·¢ËÍ½ø³ÌĞÅÏ¢Ê§°Ü" << endl;
-#endif
-#ifdef DVXWORK
-					logMsg("send ModuleRets failed\n", 0, 0, 0, 0, 0, 0);
-#endif
-					//writeLog("send ModuleRets failed.\n");
-				}
+					RUtil::printError("send moduleRets info failed!");
+				else
+					RUtil::printError("send moduleRets info success!");
+
 				delete modulebuf;
+			}
+			else{
+				RUtil::printError("disk client connect error!");
 			}
 		}
 	}
-#ifdef WIN32
-	closesocket(client);
-	WSACleanup();
-#endif
-#ifdef linux
-	close(client);
-#endif
-#ifdef DVXWORK
-	close(client);
-#endif
+	tclient.closeSocket();
 }
-
 
 

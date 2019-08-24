@@ -1,20 +1,7 @@
-﻿/******************************************************************* 
- *  2018-2019 Company NanJing RenGu 
- *  All rights reserved. 
- *   
- *  文件名称: stringz.cpp
- *  简要描述: 
- *   
- *  创建日期: 2019.2.20
- *  作者: RechardWu
- *  说明: 
- *   
- *  修改日期: 
- *  作者: 
- *  说明: 
- ******************************************************************/
+﻿#include "stringz.h"
 
-#include "stringz.h"
+#include <cstring>
+
 using namespace std;
 #pragma warning(disable : 4996)
 
@@ -31,12 +18,31 @@ int trim_z(string& s)
 	return 1;
 }
 
+#ifdef linux
+
+char *strrev(char *str)
+{
+	char *p1, *p2;
+
+	if (! str || ! *str)
+		return str;
+	for (p1 = str, p2 = str + strlen(str) - 1; p2 > p1; ++p1, --p2)
+	{
+		*p1 ^= *p2;
+		*p2 ^= *p1;
+		*p1 ^= *p2;
+	}
+	return str;
+}
+
+#endif
+
 /*  C++  去掉字符串首部空格  */
 int ltrim_z(char* s)
 {
-	_strrev(s);
+	strrev(s);
 	rtrim_z(s);
-	_strrev(s);
+	strrev(s);
 	return 1;
 }
 
@@ -84,7 +90,7 @@ vector<char*> split_z(char* pch,char* sp)
 	}
 	return vec;
 }
-	
+
 
 /*  去掉右侧（一个或多个）换行符\n  */
 int rtrim_n_z(char* s)
@@ -111,7 +117,7 @@ int rtrim_n_z(char* s)
 /*  去掉左侧（一个或多个）换行符\n  */
 int ltrim_n_z(char* s)
 {
-	_strrev(s);
+	strrev(s);
 	int s_len = strlen(s);
 	int x = 0 ;
 	for(int i = s_len - 1 ;i >= 0;i--)
@@ -124,7 +130,7 @@ int ltrim_n_z(char* s)
 		x= 1;
 		break;
 	}
-	_strrev(s);
+	strrev(s);
 	if(x == 0)
 	{
 		ltrim_n_z(s);
