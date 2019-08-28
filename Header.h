@@ -1,20 +1,4 @@
-﻿/******************************************************************* 
- *  2018-2019 Company NanJing RenGu 
- *  All rights reserved. 
- *   
- *  文件名称: Header.h
- *  简要描述: 
- *   
- *  创建日期: 2019.2.20
- *  作者: RechardWu
- *  说明: 
- *   
- *  修改日期: 
- *  作者: 
- *  说明: 
- ******************************************************************/
-
-#ifndef _HEADER_H
+﻿#ifndef _HEADER_H
 #define _HEADER_H
 
 //Windows平台所需头文件
@@ -74,19 +58,16 @@
 #endif
 
 //VXWOKRS平台所需头文件
-#ifdef DVXWORK
+#ifdef VXWORKS
 #include <vxworks.h>
 #include <stdio.h>
 #include <string>
 #include <sockLib.h>
 #include <inetLib.h>
 #include <unistd.h>
-#include <stat.h>
+#include <sys/stat.h>
 #include <string.h>
-#include <iosLib.h>
 #include <string.h>
-#include <netDrv.h>
-#include <hrFsLib.h>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <utime.h>
@@ -94,6 +75,9 @@
 #include <hostLib.h>
 #include <vector>
 #include <fstream>
+#include <taskLib.h>
+#include <netinet/tcp.h>
+#include <iostream>
 #endif
 
 using namespace std;
@@ -153,11 +137,9 @@ struct Stru_Heart
 		strcpy(downstreamSpeed, "0.0");
 #ifdef WIN32
 		osType = 1;
-#endif
-#ifdef linux
+#elif linux
 		osType = 2;
-#endif
-#ifdef DVXWORK
+#elif VXWORKS
 		osType = 3;
 #endif
 	}

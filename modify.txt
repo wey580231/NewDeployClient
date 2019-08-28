@@ -2,3 +2,7 @@
 1.对原有代码逻辑梳理，重构部分代码(日期处理、网络处理等)；
 2.修复md5算法在linux平台下计算错误问题(windows和linux平台下对unsigned long int字节数支持不一致)；
 3.支持windows、linux、中标操作系统；
+
+2019-08-27：
+1.支持vxworks下运行；
+2.修复部署0kb文件失败问题

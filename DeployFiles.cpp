@@ -16,6 +16,19 @@ void setRequestFlag(char * dest,const char * flag){
 	strcpy(dest, flag);
 }
 
+bool createDir(char * path){
+	char filepath[256] = { 0 };
+	int filepathlen = 0;
+	if (RUtil::find_last_of(path, filepath, filepathlen)){
+		if (!RUtil::existedDir(filepath)){
+			return (RUtil::creatDir(filepath) == 0);
+		}else{
+			return true;
+		}
+	}
+	return false;
+}
+
 //部署文件
 void DeployFiles()
 {
@@ -26,7 +39,7 @@ void DeployFiles()
 		return;
 	}
 
-	if (!tsocket.bind(nullptr, DEPLOYPORT)){
+	if (!tsocket.bind(NULL, DEPLOYPORT)){
 		RUtil::printError("bind deploy socket failed!");
 		return;
 	}
@@ -73,7 +86,7 @@ void DeployFiles()
 				if (errorCode == EWOULDBLOCK || errorCode == ETIMEDOUT)
 					continue;
 				else {
-					RUtil::printError("deploy client recv error,code [%d]",errorCode);
+					RUtil::printError("deploy client recv name error,code [%d]",errorCode);
 					break;
 				}
 			}
@@ -88,7 +101,8 @@ void DeployFiles()
 				RUtil::printError("deploy end!");
 				break;
 			}
-			long long size = 0;
+
+			long long size = 0;			//待部署文件长度
 			memcpy((char*)&size, (recvbuf + SERINUMLENGTH + PATHLENGTH + MD5LENGTH), 8);
 
 			char path[PATHLENGTH];
@@ -103,14 +117,24 @@ void DeployFiles()
 //			memcpy(recvbuf, convertBuf, RecvLen);
 //			delete convertBuf;
 #endif
-
 			memcpy(path, (recvbuf + SERINUMLENGTH), PATHLENGTH);
 
 			RUtil::printError("Start Deploy>>>>>> %s", path);
 
+			if (size == 0)
+			{
+				if (createDir(path)){
+					std::ofstream ofs(path, ios::binary);
+					ofs.close();
+				}
+				setRequestFlag(requestFlag, "c");
+				tclient.send((const char*)requestFlag, strlen(requestFlag));
+				continue;
+			}
+			
 			DeployPackageEntity package(0, path, md5);
 			FILE* pFile = fopen(package.targetPath, "r");
-			
+
 			//如果当前文件不存在，则通知服务器开始发送当前文件的报文
 			if (NULL == pFile)
 			{
@@ -120,52 +144,34 @@ void DeployFiles()
 				recvFlag = true;
 			}
 			else
-			{
-				//如果存在，MD5也一致，则通知服务器部署下一个文件
+			{		
 				MD5_CTX mdvalue;
 				char md5temp[34];
 				memset(md5temp, 0, 34);
 				mdvalue.GetFileMd5(md5temp, package.targetPath);
+
+				fclose(pFile);
+
+				//如果存在，MD5也一致，则通知服务器部署下一个文件
 				if (0 == strcmp(md5temp, package.MD5Value))
 				{
 					setRequestFlag(requestFlag, "f");
-
 					tclient.send((const char*)requestFlag, strlen(requestFlag));
 
 					recvFlag = false;
-					fclose(pFile);
 					continue;
 				}
 				else
 				{
 					//如果文件存在，MD5值不一致，则重新部署该文件
-					fclose(pFile);
-					//pFile = fopen(package.targetPath,"w");
 					setRequestFlag(requestFlag, "t");
 					tclient.send((const char*)requestFlag, strlen(requestFlag));
 					recvFlag = true;
 				}
 			}
-			if (size == 0)
-			{
-				setRequestFlag(requestFlag, "c");
-				tclient.send((const char*)requestFlag, strlen(requestFlag));
+		
+			if (!createDir(path))
 				continue;
-			}
-
-			char filepath[256] = {0};
-			int filepathlen = 0;
-
-			if (RUtil::find_last_of(path, filepath, filepathlen) == true)
-			{
-				if(!RUtil::existedDir(filepath))
-				{
-					if (RUtil::creatDir(filepath) != 0)
-						continue;		// 结束本次部署
-				}
-			}
-			else
-				continue;	// 结束本次部署
 
 			std::ofstream ofs;
 			ofs.open(path, ios::binary);
@@ -194,7 +200,7 @@ void DeployFiles()
 						if (errorCode == EWOULDBLOCK || errorCode == ETIMEDOUT)
 							continue;
 						else {
-							RUtil::printError("deploy client recv error,code [%d]",errorCode);
+							RUtil::printError("deploy client recv content error,code [%d]",errorCode);
 							break;
 						}
 					}
@@ -285,7 +291,6 @@ void DeployFiles()
 
 					//如果当前文件的部署结束标志为true，则跳出当前的while循环，去接收新的部署路径
 					if (deployEnd == true) {
-						filepathlen = 0;
 						break;
 					}
 				}

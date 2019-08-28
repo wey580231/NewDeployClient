@@ -157,9 +157,9 @@ void SendDiskRets(Stru_DiskRetReco diskRet)
 
 	if (g_progFlag)
 	{
-		if (strcmp(serverIP, "0.0.0.0") != 0)
+		if (!G_ServerIP.empty())
 		{
-			if (tclient.connect(serverIP, SCANRETS)){
+			if (tclient.connect(G_ServerIP.c_str(), SCANRETS)){
 				int len = sizeof(diskRet)+diskRet.diskNum * (32 + 12 + 12);
 				
 				char *diskbuf = new char[len];

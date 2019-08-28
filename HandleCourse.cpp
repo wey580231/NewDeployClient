@@ -117,8 +117,7 @@ void GetModuleInfo(char *processID, char *processName, char *priority, char *pro
 		}
 	}
 	_pclose(fp);
-#endif
-#ifdef linux
+#elif linux
 	Stru_ModuleRets moduleRets;
 	FILE* fp;
 	char szTest[1024];
@@ -142,34 +141,10 @@ void GetModuleInfo(char *processID, char *processName, char *priority, char *pro
 		}
 	}
 	pclose(fp);
+#elif VXWORKS
+	
 #endif
-#ifdef DVXWORK
-	Stru_ModuleRets moduleRets;
-	DWORD aProcesses[1024], cbNeeded, cProcesses;
-	unsigned int i;
-	if (!EnumProcesses(aProcesses, sizeof(aProcesses), &cbNeeded))
-		return;
-	cProcesses = cbNeeded / sizeof(DWORD);
-	for (i = 0; i < cProcesses; i++)
-	{
-		char *imagename = new char[128];
-		memset(imagename, 0, 128);
-		char tmp[256];
-		sprintf(tmp, "%d", aProcesses[i]);
-		string str = tmp;
-		char *p = (char*)str.data();
-		imagenamebypid_z(p, imagename);
-		memcpy(moduleRets.processID, p, sizeof(p));
-		//memcpy(processName,imagename,sizeof(imagename));
-		strtok(imagename, "\n");
-		memset(moduleRets.processName, 0, 128);
-		int namelens = 0;
-		char *name = (char*)UnicodeToUTF8(imagename, strlen(imagename), namelens);
-		strcpy(moduleRets.processName, name);
-		memset(moduleRets.priority, 0, 8);
-		moduleList.push_back(moduleRets);
-	}
-#endif
+	
 }
 
 // 通过tcp返回进程结果
@@ -183,9 +158,9 @@ void SendModuleRets(Stru_ModuleRetReco moduleRet)
 
 	if (g_progFlag)
 	{
-		if (strcmp(serverIP, "0.0.0.0") != 0)
+		if (!G_ServerIP.empty())
 		{
-			if (tclient.connect(serverIP, SCANRETS)){
+			if (tclient.connect(G_ServerIP.c_str(), SCANRETS)){
 				int len = sizeof(moduleRet)+moduleRet.taskNum * (5 + 128 + 8 + 8);
 				
 				char *modulebuf = new char[len];

@@ -1,4 +1,5 @@
 ﻿#include "MyThread.h"
+#include "RUtil.h"
 
 extern void SendHeart();
 extern void RecvServiceMulticast();
@@ -84,11 +85,10 @@ void *LinuxrecvComdProc(void *argc)
 #endif
 
 //以下为Vxworks线程函数
-#ifdef DVXWORK
+#ifdef VXWORKS
 void vxSendHeartProc(void *argc)
 {
 	SendHeart();
-	return;
 }
 
 void vxBroadCastProc(void *argc)
@@ -103,7 +103,7 @@ void vxDeployProc(void *argc)
 	return;
 }
 
-void vxrecvComdProc(void *argc)
+void vxRecvComdProc(void *argc)
 {
 	RecvCommand();
 	return;
@@ -167,12 +167,14 @@ void * scanLocalDisk(void *para)
 		return 0;
 
 	Stru_ScanRetReco scanRetReco;
+
 	// 开始本地文件扫描
 	ScanFiles(scans->scanPath, scans->scanType, scanRetReco.scanRets);
 	memcpy(scanRetReco.browserID, scans->browserID, sizeof(scans->browserID));
 	memcpy(scanRetReco.deviceID, scans->deviceID, sizeof(scans->deviceID));
 	memcpy(scanRetReco.compID, scans->compID, sizeof(scans->compID));
 	delete scans;
+
 	// 发送扫描的结果
 	scanRetReco.fileNum = scanRetReco.scanRets.size();
 	SendScanRets(scanRetReco);
@@ -191,8 +193,9 @@ void MyThread::createHeartThread()
 	int ret;
 	pthread_t heartdwThreadID;
 	ret = pthread_create(&heartdwThreadID, NULL, LinuxSendHeartProc , NULL);
-#elif DVXWORK
-
+#elif VXWORKS
+	int ret = taskSpawn("heartThead", 145, 0, 0x200000, (FUNCPTR)vxSendHeartProc, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+	RUtil::printError("heart thread %d ",ret);
 #endif
 }
 
@@ -205,8 +208,9 @@ void MyThread::createMulticastThread()
 	int ret;
 	pthread_t broadcastThreadID;
 	ret = pthread_create(&broadcastThreadID, NULL, LinuxBroadCastProc , NULL);
-#elif DVXWORK
-
+#elif VXWORKS
+	int ret = taskSpawn("multicastThread", 150, 0, 0x200000, (FUNCPTR)vxBroadCastProc, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+	RUtil::printError("multicast thread %d ",ret);
 #endif
 }
 
@@ -219,8 +223,9 @@ void MyThread::createDeployThread()
 	int ret;
 	pthread_t deployThreadID;
 	ret = pthread_create(&deployThreadID, NULL, LinuxDeployProc, NULL);
-#elif DVXWORK
-
+#elif VXWORKS
+	int ret = taskSpawn("deployThread", 145, 0x01000000, 0x200000, (FUNCPTR)vxDeployProc, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+	RUtil::printError("deploy thread %d ",ret);
 #endif
 }
 
@@ -233,8 +238,9 @@ void MyThread::createRecvOrderThread()
 	int ret;
 	pthread_t comdID;
 	ret = pthread_create(&comdID, NULL, LinuxrecvComdProc, NULL);
-#elif DVXWORK
-
+#elif VXWORKS
+	int ret = taskSpawn("recvOrderThread", 145, 0x01000000, 0x200000, (FUNCPTR)vxRecvComdProc, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+	RUtil::printError("recvOrder thread %d ",ret);
 #endif
 }
 
@@ -250,8 +256,8 @@ void MyThread::FoundDiskThread(Stru_Disk disk)
 #elif linux
 	pthread_t diskThreadID;
 	pthread_create(&diskThreadID, NULL, getSystemDiskInfo, (void*)diskbuf);
-#elif DVXWORK
-	taskSpawn("diskThread", 190, 0, 6000, (FUNCPTR)getSystemDiskInfo, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+#elif VXWORKS
+	taskSpawn("diskThread", 145, 0x01000000, 0x200000, (FUNCPTR)getSystemDiskInfo, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 #endif
 }
 
@@ -267,8 +273,8 @@ void MyThread::FoundModuleProxy(Stru_Module module)
 #elif linux
 	pthread_t moduleThreadID;
 	pthread_create(&moduleThreadID, NULL, getModuleInfo, (void*)modulebuf);
-#elif DVXWORK
-	taskSpawn("moduleThread", 180, 0, 6000, (FUNCPTR)getModuleInfo, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+#elif VXWORKS
+	taskSpawn("moduleThread", 145, 0x01000000, 0x200000, (FUNCPTR)getModuleInfo, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 #endif
 }
 
@@ -284,7 +290,7 @@ void MyThread::FonudScanFiles(Stru_Scans scans)
 #elif linux
 	pthread_t scanThreadID;
 	pthread_create(&scanThreadID, NULL, scanLocalDisk, (void*)scanbuf);
-#elif DVXWORK
-	taskSpawn("scanThread", 140, 0, 0x20000, (FUNCPTR)scanLocalDisk, (int)scanbuf, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+#elif VXWORKS
+	taskSpawn("scanThread", 145, 0x01000000, 0x200000, (FUNCPTR)scanLocalDisk, (int)scanbuf, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 #endif
 }

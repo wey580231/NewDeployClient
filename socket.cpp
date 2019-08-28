@@ -3,6 +3,8 @@
 #include <cstdio>
 #include <iostream>
 #include <cstring>
+#include "RUtil.h"
+
 using namespace std;
 
 RSocket::RSocket():socktype(R_NONE)
@@ -36,7 +38,7 @@ bool RSocket::createSocket(SocketType socktype)
         WSADATA ws;
         if(WSAStartup(MAKEWORD(2,2),&ws) != 0)
         {
-            printf("Init windows socket failed!\n");
+			RUtil::printError("Init windows socket failed!");
             return false;
         }
     }
@@ -46,7 +48,7 @@ bool RSocket::createSocket(SocketType socktype)
     if(sockFd == -1)
     {
         errorCode = getErrorCode();
-        printf("Create socket failed! [ErrorCode:%d]\n",errorCode);
+		RUtil::printError("Create socket failed! [ErrorCode:%d]", errorCode);
         return false;
     }
 
@@ -61,7 +63,7 @@ bool RSocket::bind(const char *ip, unsigned short port)
 
     localAddr.sin_family = AF_INET;
     localAddr.sin_port = htons(port);
-	if (ip == nullptr)
+	if (ip == NULL)
 		localAddr.sin_addr.s_addr = htonl(INADDR_ANY);
 	else
 		localAddr.sin_addr.s_addr = inet_addr(ip);
@@ -71,11 +73,11 @@ bool RSocket::bind(const char *ip, unsigned short port)
     {
         closeSocket();
         errorCode = getErrorCode();
-		printf("Bind socket error [%s:%d] [ErrorCode:%d]\n", ip, port, errorCode);
+		RUtil::printError("Bind socket error [%s:%d] [ErrorCode:%d]", ip, port, errorCode);
         return false;
     }
 
-	if (ip != nullptr)
+	if (ip != NULL)
 		strcpy(socketIp,ip);
 
     socketPort = port;
@@ -98,11 +100,11 @@ bool RSocket::listen(int backlog)
     {
         closeSocket();
         errorCode = getErrorCode();
-        printf("Listen socket error! [ErrorCode:%d]\n",errorCode);
+		RUtil::printError("Listen socket error! [ErrorCode:%d]", errorCode);
         return false;
     }
 
-    printf("Listen socket success!\n");
+	RUtil::printError("Listen socket success!");
 
     return true;
 }
@@ -118,7 +120,7 @@ bool RSocket::closeSocket()
             return true;
         }
 #ifdef WIN32
-		printf("Close socket error [ErrorCode:%d]!\n",GetLastError());
+		RUtil::printError("Close socket error [ErrorCode:%d]!", GetLastError());
 #endif
     }
     return false;
@@ -137,12 +139,15 @@ RSocket RSocket::accept()
 
     sockaddr_in clientAddr;
     int len = sizeof(clientAddr);
-
+#ifdef VXWORKS
+    int clientSocket = ::accept(sockFd,(sockaddr*)&clientAddr,(int*)&len);
+#else
     int clientSocket = ::accept(sockFd,(sockaddr*)&clientAddr,(socklen_t*)&len);
+#endif
     if(clientSocket == -1)
     {
 #ifdef WIN32
-		printf("Accept failed [ErrorCode:%d]!", GetLastError());
+		RUtil::printError("Accept failed [ErrorCode:%d]!", GetLastError());
 #endif
         return tmpSocket;
     }
@@ -153,7 +158,7 @@ RSocket RSocket::accept()
     tmpSocket.sockFd = clientSocket;
     tmpSocket.socktype = R_TCP;
 
-	printf("Recv socket [%s:%d]", tmpSocket.socketIp, tmpSocket.socketPort);
+	RUtil::printError("Recv socket [%s:%d]", tmpSocket.socketIp, tmpSocket.socketPort);
 
     return tmpSocket;
 }
@@ -231,20 +236,24 @@ bool RSocket::connect(const char *remoteIp, const unsigned short remotePort, int
     if(::connect(sockFd,(sockaddr*)&remoteAddr,sizeof(remoteAddr)) != 0)
     {
         fd_set set;
+#ifdef VXWORKS
+        memset((char *)&set,0,sizeof(fd_set));
+#else
         FD_ZERO(&set);
+#endif
         FD_SET(sockFd,&set);
         timeval tm;
         tm.tv_sec = timeouts;
         tm.tv_usec = 0;
         if(select(sockFd+1,0,&set,0,&tm) <= 0)
         {
-            printf("Connect timeout or error [%s:%d] %s ",remoteIp,remotePort,strerror(errno));
+			RUtil::printError("Connect timeout or error [%s:%d] %s", remoteIp, remotePort, strerror(errno));
             return false;
         }
     }
 
     setBlock(true);
-    printf("connect %s:%d success!\n",remoteIp,remotePort);
+	RUtil::printError("connect %s:%d success!", remoteIp, remotePort);
     return true;
 }
 
@@ -295,18 +304,23 @@ int RSocket::recvFrom(char *buff, int length, char *senderIp, unsigned short &se
         return -1;
 
     socklen_t fromlen = sizeof(sockaddr);
+#ifdef VXWORKS
+    int recvLen = ::recvfrom(sockFd,buff,length,0,(sockaddr *)&m_lastRecvAddr,(int *)&fromlen);
+#else
     int recvLen = ::recvfrom(sockFd,buff,length,0,(sockaddr *)&m_lastRecvAddr,&fromlen);
+#endif
 
     if(recvLen < 0){
         errorCode = getErrorCode();
 #ifdef WIN32
-        if(errorCode != WSAETIMEDOUT && errorCode != WSAEWOULDBLOCK){
-            printf("Recv socket error [ErrorCode:%d]!\n",GetLastError());
-#else
+		if (errorCode != WSAETIMEDOUT && errorCode != WSAEWOULDBLOCK){
+			RUtil::printError("Recv socket error [ErrorCode:%d]!\n", GetLastError());
+		}
+#elif linux
         if(errorCode != ETIMEDOUT && errorCode != EWOULDBLOCK){
-            printf("Recv socket error [ErrorCode:%d]!\n",errorCode);
-#endif
+			RUtil::printError("Recv socket error [ErrorCode:%d]!\n",errorCode);
         }
+#endif
         return -1;
     }
 
@@ -340,10 +354,15 @@ int RSocket::sendTo(const char *buff, const int length, const char *dest, const 
     int sendLen = 0;
     while(sendLen != length)
     {
-        int ret = ::sendto(sockFd,buff,length,0,(sockaddr*)&raddr,sizeof(sockaddr_in));
+#ifdef VXWORKS
+    	int ret = ::sendto(sockFd,const_cast<char *>(buff),length,0,(sockaddr*)&raddr,sizeof(sockaddr_in));
+#else
+    	int ret = ::sendto(sockFd,buff,length,0,(sockaddr*)&raddr,sizeof(sockaddr_in));
+#endif
         if (ret <= 0)
         {
             sendLen = -1;
+			RUtil::printError("send to %s [ErrorCode:%d]!", dest, getErrorCode());
             break;
         }
         sendLen += ret;
@@ -369,7 +388,11 @@ int RSocket::broadcast(const char *buff, const int length,const char * broadcast
     int sendLen = 0;
     while(sendLen != length)
     {
-        int ret = ::sendto(sockFd,buff,length,0,(sockaddr*)&raddr,sizeof(sockaddr_in));
+#ifdef VXWORKS
+    	int ret = ::sendto(sockFd,const_cast<char *>(buff),length,0,(sockaddr*)&raddr,sizeof(sockaddr_in));
+#else
+    	int ret = ::sendto(sockFd,buff,length,0,(sockaddr*)&raddr,sizeof(sockaddr_in));
+#endif
         if (ret <= 0)
         {
             sendLen = -1;
@@ -429,15 +452,22 @@ int RSocket::setSockopt(int optname, const char *optval, int optlen,int level)
     if(!isValid())
         return -1;
 
+#ifdef VXWORKS
+	return setsockopt(sockFd, level, optname,const_cast<char *>(optval), optlen);
+#else
 	return setsockopt(sockFd, level, optname, optval, optlen);
+#endif
 }
 
 int RSocket::getSockopt(int optname, char *optval, socklen_t optlen, int level)
 {
     if(!isValid())
         return -1;
-
-	return getsockopt(sockFd, level, optname, optval, &optlen);
+#ifdef VXWORKS
+	return getsockopt(sockFd, level, optname, const_cast<char *>(optval), (int *)&optlen);
+#else
+	return setsockopt(sockFd, level, optname, optval, optlen);
+#endif
 }
 
 int RSocket::getSendBuff()

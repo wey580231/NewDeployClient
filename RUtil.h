@@ -1,6 +1,8 @@
 ﻿#ifndef RUTIL_H_2019_08_20
 #define RUTIL_H_2019_08_20
 
+#include "Header.h"
+
 namespace RUtil{
 
 	extern void printError(const char * format,...);
@@ -12,6 +14,10 @@ namespace RUtil{
 
 	// 创建文件夹
 	extern int creatDir(char *pDir);
+
+#ifdef linux
+	extern string executeBashCommand(string commd);
+#endif
 
 }
 

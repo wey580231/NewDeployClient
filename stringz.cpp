@@ -18,8 +18,7 @@ int trim_z(string& s)
 	return 1;
 }
 
-#ifdef linux
-
+#if linux || VXWORKS
 char *strrev(char *str)
 {
 	char *p1, *p2;

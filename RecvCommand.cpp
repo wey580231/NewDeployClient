@@ -15,7 +15,7 @@ void RecvCommand()
 		return;
 	}
 
-	if (!tsocket.bind(nullptr, COMMAND)){
+	if (!tsocket.bind(NULL, COMMAND)){
 		RUtil::printError("bind command socket error!");
 		return;
 	}
@@ -31,7 +31,7 @@ void RecvCommand()
 	{
 		memset(recvline, 0, sizeof(recvline));
 
-		int t_iRecvLen = tsocket.recvFrom(recvline, sizeof(recvline), nullptr, t_usRemotePort);
+		int t_iRecvLen = tsocket.recvFrom(recvline, sizeof(recvline), NULL, t_usRemotePort);
 		if (t_iRecvLen <= 0)
 			continue;
 

@@ -3,9 +3,12 @@
 #include "MyLog.h"
 #include "MyThread.h"
 #include "global.h"
+#include "RUtil.h"
 
-int main()
+
+int main(int argc, char *argv[])
 {
+	
 #ifdef WIN32
 	WSADATA wsa;
 	WSAStartup(MAKEWORD(2, 2), &wsa);
@@ -30,8 +33,10 @@ int main()
 
 #ifdef WIN32
 	WaitForSingleObject(m_thread.heartThread, INFINITE); // 等待线程结束
-#else
+#elif linux
 	getchar();
+#elif VXWORKS
+	while(true){sleep(10);}
 #endif
 
 	return 0;

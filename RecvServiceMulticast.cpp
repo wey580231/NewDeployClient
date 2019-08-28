@@ -13,7 +13,7 @@ bool AnalysisFile()
 #elif linux
 	//fopen_s(&file,"w");
 	return false;
-#elif DVXWORK
+#elif VXWORKS
 	/*char filePath[128];
 	memset(filePath,0,128);
 	string path = "/ata0a/deployClient/NewDeployClient/returnpingdata.txt";
@@ -63,7 +63,7 @@ void RecvServiceMulticast()
 		RUtil::printError("bind serviceBroadcast socket error!");
 		return;
 	}
-
+	
 	if (!tsocket.joinGroup(hostIP, "224.10.10.15")){
 		RUtil::printError("join group error!");
 		return;
@@ -79,11 +79,13 @@ void RecvServiceMulticast()
 	unsigned short t_usRemotePort = 0;
 	char sign[5];
 	char recvline[20];
+	
 	while (g_progFlag)
 	{
 		memset(recvline, 0, 20);
 		
 		r = tsocket.recvFrom(recvline, sizeof(recvline), t_remoteIp, t_usRemotePort);
+		
 		if (r <= 0)
 			continue;
 
@@ -93,40 +95,47 @@ void RecvServiceMulticast()
 		if (strcmp(sign, "S101") == 0)
 		{
 			// 获得服务器的IP地址
-			memcpy(serverIP, recvline + 4, r - 4);
+			G_ServerIP.clear();
+			G_ServerIP.append(recvline + 4, r - 4);
+			
+			RUtil::printError("recv server ip:%s", G_ServerIP.c_str());
+			
 #ifdef WIN32
-			char frontstr[100] = "cmd /c ping ";
-			strncat(frontstr, serverIP, sizeof(serverIP));
-			char afterstr[100] = " -n 1 -w 1000 >returnpingdata.txt";
-			strncat(frontstr, afterstr, sizeof(afterstr));
+			break;
+			/*
+				char frontstr[100] = "cmd /c ping ";
+				strncat(frontstr, G_ServerIP.c_str(), sizeof(G_ServerIP.length()));
+				char afterstr[100] = " -n 1 -w 1000 >returnpingdata.txt";
+				strncat(frontstr, afterstr, sizeof(afterstr));
 
-			WinExec((char*)frontstr, SW_HIDE);
-			Sleep(1000);
-			bool returndata = AnalysisFile();
-			if (returndata == false)
-			{
-				memset(serverIP, 0, 15);
-			}
-			else if (returndata == true)
-			{
-				cout << "server_IP: " << serverIP << "   connect success!" << endl;
-				break;
-			}
+				WinExec((char*)frontstr, SW_HIDE);
+				Sleep(1000);
+				bool returndata = AnalysisFile();
+				if (returndata == false)
+				{
+					G_ServerIP.clear();
+					RUtil::printError("ping server %s error", G_ServerIP.c_str());
+				}
+				else if (returndata == true)
+				{
+					break;
+				}
+			*/
 #elif linux
             //NOTE 2019-08-23 linux只ping服务器,不检测是否可以ping通（无意义）
 			char command[80] = {0};
 			string tmp = " ping ";
 			strncat(command,tmp.c_str(),strlen(tmp.c_str()));
-			strncat(command,serverIP,strlen(serverIP));
+			strncat(command,G_ServerIP.c_str(),G_ServerIP.size());
 			tmp = " -c4 > `pwd`/returnpingdata.txt ";
 			strncat(command,tmp.c_str(),strlen(tmp.c_str()));
 
-			RUtil::printError("recv server ip:%s",serverIP);
-
-			if(popen(command,"r") == nullptr){
+			if(popen(command,"r") == NULL){
 				RUtil::printError("exec command [%s] error.",command);
 				break;
 			}
+#elif VXWORKS
+			
 #endif
 		}
 	}

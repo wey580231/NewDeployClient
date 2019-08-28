@@ -26,6 +26,18 @@ typedef  int socklen_t;
 #include <fcntl.h>
 #include <errno.h>
 #define closesocket close
+#elif VXWORKS
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sockLib.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <types/vxTypesOld.h>
+#include <inetLib.h>
+#include <ioLib.h>
+#define closesocket close
 #endif
 
 

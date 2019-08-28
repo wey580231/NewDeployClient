@@ -1,4 +1,5 @@
 ﻿#include "md5.h"
+#include <math.h>
 
 #pragma warning(disable : 4996)
 
@@ -106,6 +107,9 @@ bool MD5_CTX::GetFileMd5(char *pMd5,  const char *pFileName)
 #elif linux
     fseeko64(pFile,0,SEEK_END);
     length = ftello64(pFile);
+#elif VXWORKS
+    fseek(pFile,0,SEEK_END);
+    length = ftell(pFile);
 #endif
 
     size_t t_iMaxSingleFilePerReadLen = static_cast<size_t >(pow(2.0,30));
@@ -128,6 +132,8 @@ bool MD5_CTX::GetFileMd5(char *pMd5,  const char *pFileName)
             _fseeki64(pFile,readlength, SEEK_SET);
 #elif linux
             fseeko64(pFile,readlength,SEEK_SET);
+#elif VXWORKS
+            fseek(pFile,readlength,SEEK_SET);
 #endif
             unsigned char *pInPut = (unsigned char *)malloc(t_iMaxSingleFilePerReadLen);
             size_t step = (t_iMaxSingleFilePerReadLen < (length - readlength))?t_iMaxSingleFilePerReadLen:(length - readlength);

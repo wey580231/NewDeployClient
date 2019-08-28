@@ -6,10 +6,6 @@
 
 #include "Header.h"
 
-#ifdef DVXWORK
-
-#endif
-
 namespace RUtil{
 
 void printError(const char * format, ...){
@@ -21,7 +17,8 @@ void printError(const char * format, ...){
 	va_end(list);
 
 #ifdef VXWORKS
-	logMsg(tbuff, 0, 0, 0, 0, 0, 0);
+	std::cout<<tbuff<<std::endl;
+//	logMsg(tbuff, 0, 0, 0, 0, 0, 0);
 #else
 	std::cout << tbuff << std::endl;
 #endif
@@ -71,12 +68,8 @@ int my_mkdir(char *pszDir)
 {
 #ifdef WIN32
 	return mkdir(pszDir);
-#endif
-#ifdef linux
+#else
 	return mkdir(pszDir, S_IRUSR | S_IWUSR | S_IXUSR | S_IRWXG | S_IRWXO);
-#endif
-#ifdef DVXWORK
-	return mkdir(pszDir);
 #endif
 }
 
@@ -105,7 +98,7 @@ int creatDir(char *pDir)
 		{
 			pszDir[i] = '\0';
 
-			// 判断该目录是存在
+			//WARNING 20190827 windows平台下不能有文件名为com2、com3之类和串口冲突的名称
 			iRet = access(pszDir, 0);
 			if (iRet != 0)
 			{
@@ -113,13 +106,9 @@ int creatDir(char *pDir)
 				iRet = my_mkdir(pszDir);
 				if (iRet != 0)
 				{
-					//printf("Create %s file is failed\n",pszDir);
+					printError("Create %s file is failed\n",pszDir);
 					return -1;
 				}
-			}
-			else
-			{
-				//printf("the %s is exist\n",pszDir);
 			}
 			pszDir[i] = '/';
 		}
@@ -129,5 +118,23 @@ int creatDir(char *pDir)
 	free(pszDir);
 	return iRet;
 }
+
+#ifdef linux
+//执行bash命令，返回命令中输出的内容
+string executeBashCommand(string commd){
+	string result;
+	if(commd.size() > 0){
+		FILE *tf = popen(commd.c_str(), "r");
+		if (tf) {
+			char buff[64] = {0};
+			if(fgets(buff,sizeof(buff),tf) != NULL){
+				result.append(buff);
+				pclose(tf);
+			}
+		}
+	}
+	return result;
+}
+#endif
 
 }

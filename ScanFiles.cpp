@@ -141,9 +141,9 @@ void SendScanRets(Stru_ScanRetReco retReco)
 
     if (g_progFlag)
     {
-        if (strcmp(serverIP, "0.0.0.0") != 0)
+		if (!G_ServerIP.empty())
         {
-            if (tclient.connect(serverIP, SCANRETS)){
+			if (tclient.connect(G_ServerIP.c_str(), SCANRETS)){
 
                 int len = sizeof(retReco)+retReco.fileNum * (256 + 34);
 

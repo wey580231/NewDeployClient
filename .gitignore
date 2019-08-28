@@ -36,6 +36,11 @@ Generated\ Files/
 *.v12
 
 cmake-build-debug/
+.cproject
+.project
+.wrmakefile
+.wrproject
+PENTIUM4gnu/
 
 # MSTest test Results
 [Tt]est[Rr]esult*/
